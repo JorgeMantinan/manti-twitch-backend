@@ -88,4 +88,49 @@ app.get('/api/chatters', async (req, res) => {
     }
 });
 
+// 4. Endpoint Obtener suscriptores de twitch entre fechas
+app.get('/api/subs', async (req, res) => {
+    try {
+        const { startDate, endDate } = req.query;
+        const authHeader = req.headers.authorization;
+        if (!authHeader) return res.status(401).send("No hay token");
+
+        const token = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET).twitchToken;
+
+        // 1. Obtenemos automáticamente el ID del usuario que ha iniciado sesión
+        const userRes = await axios.get('https://api.twitch.tv/helix/users', {
+            headers: { 
+                'Authorization': `Bearer ${token}`, 
+                'Client-Id': process.env.TWITCH_CLIENT_ID 
+            }
+        });
+        const myId = userRes.data.data[0].id;
+
+        // 2. Pedimos SUS PROPIAS suscripciones
+        const subsRes = await axios.get('https://api.twitch.tv/helix/subscriptions', {
+            params: { broadcaster_id: myId },
+            headers: { 
+                'Authorization': `Bearer ${token}`, 
+                'Client-Id': process.env.TWITCH_CLIENT_ID 
+            }
+        });
+
+        // 3. Filtramos por el rango de fechas recibido del frontend
+        const filteredSubs = subsRes.data.data.filter(sub => {
+            const subDate = new Date(sub.created_at);
+            const start = startDate ? new Date(startDate) : new Date(0);
+            const end = endDate ? new Date(endDate) : new Date();
+            return subDate >= start && subDate <= end;
+        });
+
+        res.json({ 
+            user: userRes.data.data[0].display_name,
+            subscribers: filteredSubs 
+        });
+    } catch (e) {
+        console.error("Error en Subs:", e.response?.data || e.message);
+        res.status(500).json({ error: "No se pudieron obtener tus suscripciones" });
+    }
+});
+
 app.listen(3000, () => console.log('Servidor corriendo en puerto 3000'));
