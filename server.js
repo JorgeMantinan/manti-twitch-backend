@@ -17,7 +17,11 @@ app.get('/', (req, res) => {
 
 // 1. Redirigir a Twitch (esto lo inicia el móvil)
 app.get('/auth/twitch', (req, res) => {
-    const url = `https://id.twitch.tv/oauth2/authorize?client_id=${process.env.TWITCH_CLIENT_ID}&redirect_uri=${process.env.TWITCH_REDIRECT_URI}&response_type=code&scope=moderator:read:chatters`;
+    // 1. Limpiamos la URL de posibles espacios invisibles
+    const cleanRedirectUri = process.env.TWITCH_REDIRECT_URI.trim();
+    // 2. Usamos la variable LIMPIA en la URL de Twitch
+    const url = `https://id.twitch.tv/oauth2/authorize?client_id=${process.env.TWITCH_CLIENT_ID}&redirect_uri=${cleanRedirectUri}&response_type=code&scope=moderator:read:chatters`;
+    
     res.redirect(url);
 });
 
