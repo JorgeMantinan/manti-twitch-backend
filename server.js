@@ -22,7 +22,7 @@ app.get('/auth/twitch', (req, res) => {
 });
 
 // 2. Callback: Twitch nos da el código
-app.get('/auth/callback', async (req, res) => {
+app.get('/auth/twitch/callback', async (req, res) => {
     const { code } = req.query;
 
     try {
@@ -53,13 +53,36 @@ app.get('/auth/callback', async (req, res) => {
 app.get('/api/chatters', async (req, res) => {
     try {
         const authHeader = req.headers.authorization;
-        const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
+        if (!authHeader) return res.status(401).send("No hay token");
         
-        // Aquí llamarías a la API de Twitch usando decoded.twitchToken
-        // Ejemplo simplificado:
-        res.json({ message: "Aquí iría la lista de usuarios" });
+        const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
+        const token = decoded.twitchToken;
+
+        // 1. Obtener tu propio ID (el del moderador logueado)
+        const userRes = await axios.get('https://api.twitch.tv/helix/users', {
+            headers: { 'Authorization': `Bearer ${token}`, 'Client-Id': process.env.TWITCH_CLIENT_ID }
+        });
+        const moderatorId = userRes.data.data[0].id;
+
+        // 2. Obtener el ID de ceo_dos
+        const broadcasterRes = await axios.get('https://api.twitch.tv/helix/users?login=ceo_dos', {
+            headers: { 'Authorization': `Bearer ${token}`, 'Client-Id': process.env.TWITCH_CLIENT_ID }
+        });
+        const broadcasterId = broadcasterRes.data.data[0].id;
+
+        // 3. Obtener la lista de chatters
+        const chattersRes = await axios.get(`https://api.twitch.tv/helix/chat/chatters`, {
+            params: { broadcaster_id: broadcasterId, moderator_id: moderatorId },
+            headers: { 'Authorization': `Bearer ${token}`, 'Client-Id': process.env.TWITCH_CLIENT_ID }
+        });
+
+        // Enviamos solo los nombres de usuario al frontend
+        const listaNombres = chattersRes.data.data.map(user => user.user_login);
+        res.json({ chatters: listaNombres });
+
     } catch (e) {
-        res.status(401).send("No autorizado");
+        console.error("Error API Twitch:", e.response?.data || e.message);
+        res.status(500).json({ error: "No se pudo obtener la lista" });
     }
 });
 
