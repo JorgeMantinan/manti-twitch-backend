@@ -21,10 +21,6 @@ app.get('/auth/twitch', (req, res) => {
     const cleanRedirectUri = process.env.TWITCH_REDIRECT_URI.trim();
     // 2. Usamos la variable LIMPIA en la URL de Twitch
     const url = `https://id.twitch.tv/oauth2/authorize?client_id=${process.env.TWITCH_CLIENT_ID}&redirect_uri=${cleanRedirectUri}&response_type=code&scope=moderator:read:chatters`;
-    
-    console.log("cleanRedirectUri: " + cleanRedirectUri);
-    console.log("url: " + url);
-
 
     res.redirect(url);
 });
@@ -46,9 +42,6 @@ app.get('/auth/twitch/callback', async (req, res) => {
 
         const twitchToken = response.data.access_token;
         const userToken = jwt.sign({ twitchToken }, process.env.JWT_SECRET, { expiresIn: '1h' });
-
-        console.log("twitchToken: " + twitchToken);
-        console.log("userToken: " + userToken);
 
         // REDIRECCIÓN WEB: Te devuelve a tu ruleta con el token en la URL
         res.redirect(`https://jorgemantinan.github.io/manti-twitch/?token=${userToken}`);
