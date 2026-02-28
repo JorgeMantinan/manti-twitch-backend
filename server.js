@@ -26,25 +26,23 @@ app.get('/auth/twitch/callback', async (req, res) => {
     const { code } = req.query;
 
     try {
-        // Intercambiamos código por Token real
         const response = await axios.post('https://id.twitch.tv/oauth2/token', null, {
             params: {
                 client_id: process.env.TWITCH_CLIENT_ID,
                 client_secret: process.env.TWITCH_CLIENT_SECRET,
-                code,
+                code: code,
                 grant_type: 'authorization_code',
                 redirect_uri: process.env.TWITCH_REDIRECT_URI
             }
         });
 
         const twitchToken = response.data.access_token;
-
-        // Creamos nuestro propio JWT para el móvil
         const userToken = jwt.sign({ twitchToken }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-        // Redirigimos de vuelta a la App con el token (usando un Deep Link)
-        res.redirect(`tuapp://login?token=${userToken}`);
+        // REDIRECCIÓN WEB: Te devuelve a tu ruleta con el token en la URL
+        res.redirect(`https://jorgemantinan.github.io/manti-twitch/?token=${userToken}`);
     } catch (error) {
+        console.error(error.response?.data || error.message);
         res.status(500).send('Error en la autenticación');
     }
 });
