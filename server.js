@@ -6,7 +6,9 @@ const jwt = require('jsonwebtoken');
 
 const app = express();
 app.use(cors({
-    origin: 'https://jorgemantinan.github.io/manti-twitch/'
+    origin: ['https://jorgemantinan.github.io',
+             'https://jorgemantinan.github.io/manti-twitch',
+             'https://jorgemantinan.github.io/manti-twitch/']
 }));
 app.use(express.json());
 
