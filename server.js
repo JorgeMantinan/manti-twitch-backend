@@ -12,22 +12,54 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Main
+/**
+ * MIDDLEWARE: Verify JWT and extract Twitch Data
+ * This function runs before your endpoints to ensure the user is logged in.
+ */
+const verifyToken = (req, res, next) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) return res.status(401).json({ error: "No token provided" });
+
+    try {
+        // Expected format: "Bearer <token>"
+        const token = authHeader.split(' ')[1];
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        
+        // Inject data into req.user so endpoints can access it
+        req.user = { 
+            accessToken: decoded.twitchToken, 
+            twitchId: decoded.twitchId 
+        };
+        
+        next(); // Continue to the endpoint
+    } catch (err) {
+        console.error("JWT Verification Error:", err.message);
+        return res.status(403).json({ error: "Invalid or expired token" });
+    }
+};
+
+/**
+ * AUTHENTICATION ENDPOINTS
+ */
+
 app.get('/', (req, res) => {
-  res.send('<h1>🚀 Tamoh ready 🚀</h1>');
+  res.send('<h1>🚀</h1>');
 });
 
-// 1. Redirigir a Twitch (esto lo inicia el móvil)
 app.get('/auth/twitch', (req, res) => {
-    // 1. Limpiamos la URL de posibles espacios invisibles
     const cleanRedirectUri = process.env.TWITCH_REDIRECT_URI.trim();
-    // 2. Usamos la variable LIMPIA en la URL de Twitch
-    const url = `https://id.twitch.tv/oauth2/authorize?client_id=${process.env.TWITCH_CLIENT_ID}&redirect_uri=${cleanRedirectUri}&response_type=code&scope=moderator:read:chatters`;
+    const scopes = [
+    'moderator:read:chatters',
+    'channel:read:subscriptions',
+    'moderator:read:followers'
+    ].join(' '); // Esto crea la cadena con espacios
+
+const url = `https://id.twitch.tv/oauth2/authorize?client_id=${process.env.TWITCH_CLIENT_ID}&redirect_uri=${encodeURIComponent(cleanRedirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}`;
 
     res.redirect(url);
 });
 
-// 2. Callback: Twitch nos da el código
+// Callback: Twitch Login
 app.get('/auth/twitch/callback', async (req, res) => {
     const { code } = req.query;
 
@@ -43,82 +75,98 @@ app.get('/auth/twitch/callback', async (req, res) => {
         });
 
         const twitchToken = response.data.access_token;
-        const userToken = jwt.sign({ twitchToken }, process.env.JWT_SECRET, { expiresIn: '1h' });
 
-        // REDIRECCIÓN WEB: Te devuelve a tu ruleta con el token en la URL
+        // NEW: Get user ID from Twitch before signing our JWT
+        const userRes = await axios.get('https://api.twitch.tv/helix/users', {
+            headers: { 'Authorization': `Bearer ${twitchToken}`, 'Client-Id': process.env.TWITCH_CLIENT_ID }
+        });
+        const twitchId = userRes.data.data[0].id;
+
+        // Sign JWT including both Token and ID
+        const userToken = jwt.sign({ twitchToken, twitchId }, process.env.JWT_SECRET, { expiresIn: '2h' });
+
         res.redirect(`https://jorgemantinan.github.io/manti-twitch/?token=${userToken}`);
     } catch (error) {
-        console.error(error.response?.data || error.message);
-        res.status(500).send('Error en la autenticación....');
+        res.status(500).send('Error en la autenticación');
     }
 });
 
-// 3. Endpoint Protegido para obtener chatters
-app.get('/api/chatters', async (req, res) => {
+
+/**
+ * Functions
+ */
+
+// High-Performance Pager
+async function fetchAllTwitchData(url, token) {
+  let allData = [];
+  let cursor = '';
+  
+  try {
+    do {
+      const response = await axios.get(`${url}${cursor ? `&after=${cursor}` : ''}`, {
+        headers: { 
+          'Authorization': `Bearer ${token}`, 
+          'Client-Id': process.env.TWITCH_CLIENT_ID 
+        }
+      });
+
+      allData.push(...response.data.data);
+      cursor = response.data.pagination?.cursor;
+
+      // Si nos quedan pocas peticiones en el "cubo" de Twitch, esperamos un poco
+      const remaining = response.headers['ratelimit-remaining'];
+      if (remaining && parseInt(remaining) < 10) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } while (cursor);
+    
+    return allData;
+  } catch (error) {
+    console.error("Error en paginación:", error.response?.data || error.message);
+    throw error;
+  }
+}
+
+
+/**
+ * PRACTICAL ENDPOINTS
+ */
+
+// Endpoint GET chatters
+app.get('/api/chatters', verifyToken, async (req, res) => {
     try {
-        const authHeader = req.headers.authorization;
-        if (!authHeader) return res.status(401).send("No hay token");
-        
-        const decoded = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET);
-        const token = decoded.twitchToken;
+        const { accessToken, twitchId } = req.user;
 
-        // 1. Obtener tu propio ID (el del moderador logueado)
-        const userRes = await axios.get('https://api.twitch.tv/helix/users', {
-            headers: { 'Authorization': `Bearer ${token}`, 'Client-Id': process.env.TWITCH_CLIENT_ID }
-        });
-        const moderatorId = userRes.data.data[0].id;
+        const broadcasterId = twitchId; 
 
-        // 2. Obtener el ID de ceo_dos
-        const broadcasterRes = await axios.get('https://api.twitch.tv/helix/users?login=ceo_dos', {
-            headers: { 'Authorization': `Bearer ${token}`, 'Client-Id': process.env.TWITCH_CLIENT_ID }
-        });
-        const broadcasterId = broadcasterRes.data.data[0].id;
-
-        // 3. Obtener la lista de chatters
         const chattersRes = await axios.get(`https://api.twitch.tv/helix/chat/chatters`, {
-            params: { broadcaster_id: broadcasterId, moderator_id: moderatorId },
-            headers: { 'Authorization': `Bearer ${token}`, 'Client-Id': process.env.TWITCH_CLIENT_ID }
+            params: { broadcaster_id: broadcasterId, moderator_id: twitchId },
+            headers: { 
+                'Authorization': `Bearer ${accessToken}`, 
+                'Client-Id': process.env.TWITCH_CLIENT_ID 
+            }
         });
 
-        // Enviamos solo los nombres de usuario al frontend
         const listaNombres = chattersRes.data.data.map(user => user.user_login);
         res.json({ chatters: listaNombres });
 
     } catch (e) {
-        console.error("Error API Twitch:", e.response?.data || e.message);
-        res.status(500).json({ error: "No se pudo obtener la lista" });
+        console.error("Error API Twitch Chatters:", e.response?.data || e.message);
+        res.status(500).json({ error: "No se pudo obtener la lista de chatters" });
     }
 });
 
-// 4. Endpoint Obtener suscriptores de twitch entre fechas
-app.get('/api/subs', async (req, res) => {
+// Endpoint GET subs of twitch between dates
+app.get('/api/subs', verifyToken, async (req, res) => {
     try {
         const { startDate, endDate } = req.query;
-        const authHeader = req.headers.authorization;
-        if (!authHeader) return res.status(401).send("No hay token");
+        const { accessToken, twitchId } = req.user;
 
-        const token = jwt.verify(authHeader.split(' ')[1], process.env.JWT_SECRET).twitchToken;
+        // Usamos nuestra función de paginación para no dejarnos ningún sub fuera
+        const baseUrl = `https://api.twitch.tv/helix/subscriptions?broadcaster_id=${twitchId}&first=100`;
+        const allSubs = await fetchAllTwitchData(baseUrl, accessToken);
 
-        // 1. Obtenemos automáticamente el ID del usuario que ha iniciado sesión
-        const userRes = await axios.get('https://api.twitch.tv/helix/users', {
-            headers: { 
-                'Authorization': `Bearer ${token}`, 
-                'Client-Id': process.env.TWITCH_CLIENT_ID 
-            }
-        });
-        const myId = userRes.data.data[0].id;
-
-        // 2. Pedimos SUS PROPIAS suscripciones
-        const subsRes = await axios.get('https://api.twitch.tv/helix/subscriptions', {
-            params: { broadcaster_id: myId },
-            headers: { 
-                'Authorization': `Bearer ${token}`, 
-                'Client-Id': process.env.TWITCH_CLIENT_ID 
-            }
-        });
-
-        // 3. Filtramos por el rango de fechas recibido del frontend
-        const filteredSubs = subsRes.data.data.filter(sub => {
+        const filteredSubs = allSubs.filter(sub => {
             const subDate = new Date(sub.created_at);
             const start = startDate ? new Date(startDate) : new Date(0);
             const end = endDate ? new Date(endDate) : new Date();
@@ -126,13 +174,266 @@ app.get('/api/subs', async (req, res) => {
         });
 
         res.json({ 
-            user: userRes.data.data[0].display_name,
+            totalLoaded: allSubs.length,
             subscribers: filteredSubs 
         });
     } catch (e) {
         console.error("Error en Subs:", e.response?.data || e.message);
         res.status(500).json({ error: "No se pudieron obtener tus suscripciones" });
     }
+});
+
+// Endpoint GET subs of twitch between dates WITH FILTERS GIFTERS
+app.get('/api/subs-history', verifyToken, async (req, res) => {
+  const { startDate, endDate, subType } = req.query; 
+  const { accessToken, twitchId } = req.user; // Now this works!
+
+  try {
+    const url = `https://api.twitch.tv/helix/subscriptions?broadcaster_id=${twitchId}&first=100`;
+    const allSubs = await fetchAllTwitchData(url, accessToken);
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    
+    let filtered = allSubs.filter(s => {
+      const subDate = new Date(s.created_at);
+      return subDate >= start && subDate <= end;
+    });
+
+    if (subType === 'only_gifters') {
+      const giftersMap = new Map();
+      filtered.filter(s => s.is_gift).forEach(s => {
+        const count = giftersMap.get(s.gifter_name) || 0;
+        giftersMap.set(s.gifter_name, count + 1);
+      });
+      return res.json(Object.fromEntries(giftersMap));
+    }
+
+    if (subType === 'non_gifted') filtered = filtered.filter(s => !s.is_gift);
+
+    res.json(filtered);
+  } catch (error) {
+    res.status(500).json({ error: "Error processing sub data" });
+  }
+});
+
+
+let globalChatLogs = [];
+// ENDPOINT GET ACTIVE FOLLOWERS THAT HAVED CHATTED BETWEEN DATES
+app.get('/api/active-followers', verifyToken, async (req, res) => {
+  const { startDate, endDate } = req.query;
+  const { accessToken, twitchId } = req.user; // Now this works!
+
+  try {
+    const url = `https://api.twitch.tv/helix/channels/followers?broadcaster_id=${twitchId}&first=100`;
+    const allFollowers = await fetchAllTwitchData(url, accessToken);
+
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+    const activeChatters = new Set(
+      globalChatLogs
+        .filter(log => log.timestamp >= start && log.timestamp <= end)
+        .map(log => log.user.toLowerCase())
+    );
+
+    const result = allFollowers.filter(f => activeChatters.has(f.user_login.toLowerCase()));
+    res.json(result);
+  } catch (error) {
+    res.status(500).send(error.message);
+  }
+});
+
+
+/**
+* ENDPOINT: Raffle Listener with Multipliers (High Availability)
+* STRATEGY: "Pre-load & Cache" to support over 5,000 simultaneous messages and over 30,000 subscribers.
+* 1. Upon activation (START), the server downloads and dumps the entire subscriber list into a Map.
+* 2. Message processing is performed in local memory (O(1)), preventing crashes due to the Twitch API's Rate Limits (429) when receiving massive traffic spikes.
+* 3. Avoids asynchronous requests for each message, ensuring the server does not crash.
+*/
+let raffleState = {
+  active: false,
+  keyword: '',
+  subMult: 1,
+  giftMult: 1,
+  startDate: null,
+  endDate: null,
+  cachedSubs: new Map(), // Key: username, Value: { isSub: boolean, giftsSent: number }
+  participants: new Map() // Avoid duplicates on chat
+};
+
+app.post('/api/raffle/start', verifyToken, async (req, res) => {
+  const { keyword, subMult, giftMult, startDate, endDate } = req.body;
+  const { accessToken, twitchId } = req.user; // Datos extraídos automáticamente por el middleware
+
+  try {
+    raffleState.active = false;
+    raffleState.participants.clear();
+    raffleState.cachedSubs.clear();
+    
+    raffleState.keyword = keyword;
+    raffleState.subMult = parseFloat(subMult) || 1;
+    raffleState.giftMult = parseFloat(giftMult) || 1;
+    raffleState.startDate = new Date(startDate);
+    raffleState.endDate = new Date(endDate);
+
+    // Masive Pre Load
+    const baseUrl = `https://api.twitch.tv/helix/subscriptions?broadcaster_id=${twitchId}&first=100`;
+    const allSubs = await fetchAllTwitchData(baseUrl, accessToken);
+
+    // Identify current subscribers and count gifts sent
+    allSubs.forEach(sub => {
+      const subDate = new Date(sub.created_at);
+      const recipient = sub.user_name.toLowerCase();
+      const gifter = sub.gifter_name ? sub.gifter_name.toLowerCase() : null;
+
+      // Registrar o actualizar datos del suscriptor
+      if (!raffleState.cachedSubs.has(recipient)) {
+        raffleState.cachedSubs.set(recipient, { isSub: true, giftsSent: 0 });
+      } else {
+        raffleState.cachedSubs.get(recipient).isSub = true;
+      }
+
+      // Lógica de conteo de regalos enviados por fechas
+      if (sub.is_gift && gifter && subDate >= raffleState.startDate && subDate <= raffleState.endDate) {
+        if (!raffleState.cachedSubs.has(gifter)) {
+          raffleState.cachedSubs.set(gifter, { isSub: false, giftsSent: 1 });
+        } else {
+          raffleState.cachedSubs.get(gifter).giftsSent += 1;
+        }
+      }
+    });
+
+    // Register the subscriber (who receives the benefit of the subscription)
+    raffleState.active = true;
+    
+    res.json({ 
+      status: "success", 
+      message: `Sorteo activado. ${allSubs.length} subs cacheados correctamente.`,
+      totalSubsLoaded: allSubs.length 
+    });
+
+  } catch (error) {
+    console.error("Error en Raffle Start:", error.response?.data || error.message);
+    res.status(500).json({ error: "Fallo al iniciar el sorteo y precargar datos." });
+  }
+});
+
+
+/**
+ * ENDPOINT: STOP RAFFLE
+ * Purpose: Deactivates the chat listener and returns the final participant list.
+ * Performance: O(N log N) due to sorting, where N is the number of unique participants.
+ */
+app.post('/api/raffle/stop', (req, res) => {
+  try {
+    // 1. Disable the real-time message listener
+    raffleState.active = false;
+
+    // 2. Convert the Participant Map into an Array for the Frontend
+    const finalParticipants = Array.from(raffleState.participants.values());
+
+    /**
+     * 3. Sort by Points (Descending Order)
+     * Users with higher points (Subs/Gifters) will appear at the top.
+     */
+    finalParticipants.sort((a, b) => b.points - a.points);
+
+    // 4. Send the structured response
+    res.json({
+      status: "success",
+      totalParticipants: finalParticipants.length,
+      data: finalParticipants
+    });
+
+  } catch (error) {
+    console.error("Error stopping raffle:", error.message);
+    res.status(500).json({ error: "Failed to process final raffle data." });
+  }
+});
+
+/**
+ * TMI.js Chat Listener
+ * logic: Processes keyword entries using the pre-loaded subscriber cache.
+ * Efficiency: O(1) lookup time per message using Map.has() and Map.get().
+ */
+client.on('message', (channel, tags, message, self) => {
+  // Ignore if: raffle is inactive, message is from the bot, or keyword is missing
+  if (!raffleState.active || self || !message.toLowerCase().includes(raffleState.keyword.toLowerCase())) {
+    return;
+  }
+
+  const username = tags.username.toLowerCase();
+  const displayName = tags['display-name'];
+
+  // Prevent duplicate entries from the same user to save CPU cycles
+  if (raffleState.participants.has(username)) return;
+
+  // 1. Set Base Entry Point (Standard for all viewers)
+  let totalPoints = 1;
+
+  /**
+   * 2. Subscriber & Gifter Logic
+   * Lookup user data in the O(1) memory cache pre-loaded at 'raffle/start'.
+   */
+  const userData = raffleState.cachedSubs.get(username);
+
+  if (userData) {
+    // Apply Multiplier if the user is a current Subscriber
+    if (userData.isSub) {
+      totalPoints *= raffleState.subMult;
+    }
+    
+    // Add Bonus Points for Sub-Gifts sent within the specified Date Range
+    if (userData.giftsSent > 0) {
+      totalPoints += (userData.giftsSent * raffleState.giftMult);
+    }
+  }
+
+  /**
+   * 3. Register Participant
+   * We store the Display Name (correct casing) and calculated points.
+   */
+  raffleState.participants.set(username, {
+    username: displayName,
+    points: totalPoints,
+    isSub: userData ? userData.isSub : false,
+    giftsSent: userData ? userData.giftsSent : 0
+  });
+});
+
+/**
+ * ENDPOINT: PICK RANDOM WINNER WITH PROBABILITY
+ */
+app.post('/api/raffle/pick-winner', (req, res) => {
+  const participants = Array.from(raffleState.participants.values());
+
+  if (participants.length === 0) {
+    return res.status(400).json({ error: "No hay participantes en el sorteo." });
+  }
+
+  const totalWeight = participants.reduce((acc, p) => acc + p.points, 0);
+
+  let random = Math.random() * totalWeight;
+
+  let winner = null;
+  for (const p of participants) {
+    if (random < p.points) {
+      winner = p;
+      break;
+    }
+    random -= p.points;
+  }
+
+  res.json({
+    status: "success",
+    winner: winner,
+    stats: {
+      totalParticipants: participants.length,
+      totalTicketsInUrn: totalWeight,
+      probability: ((winner.points / totalWeight) * 100).toFixed(2) + "%"
+    }
+  });
 });
 
 app.listen(3000, () => console.log('Servidor corriendo en puerto 3000'));
