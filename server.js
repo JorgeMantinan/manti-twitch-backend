@@ -3,8 +3,29 @@ const express = require('express');
 const cors = require('cors');
 const axios = require('axios');
 const jwt = require('jsonwebtoken');
+const tmi = require('tmi.js');
 
 const app = express();
+
+// Configuración del bot de Twitch
+const client = new tmi.Client({
+    options: { debug: true },
+    identity: {
+        username: 'manti_tiri_ri_ti',
+        password: `oauth:${process.env.TWITCH_ACCESS_TOKEN}`
+    },
+    channels: []
+});
+
+if (!process.env.TWITCH_ACCESS_TOKEN) {
+  console.error("❌ TWITCH_ACCESS_TOKEN no está definido");
+}
+
+client.connect().catch(console.error);
+
+// Conectar a Twitch
+client.connect().catch(console.error);
+
 app.use(cors({
     origin: ['https://jorgemantinan.github.io',
              'https://jorgemantinan.github.io/manti-twitch',
@@ -262,61 +283,77 @@ let raffleState = {
   participants: new Map() // Avoid duplicates on chat
 };
 
+/**
+ * ENDPOINT: RAFFLE START
+ * Logic: Authenticates, joins the streamer's chat, and pre-loads sub data.
+ */
 app.post('/api/raffle/start', verifyToken, async (req, res) => {
-  const { keyword, subMult, giftMult, startDate, endDate } = req.body;
-  const { accessToken, twitchId } = req.user; // Datos extraídos automáticamente por el middleware
+    const { keyword, subMult, giftMult, startDate, endDate } = req.body;
+    const { accessToken, twitchId } = req.user; // Extract from JWT Middleware
 
-  try {
-    raffleState.active = false;
-    raffleState.participants.clear();
-    raffleState.cachedSubs.clear();
-    
-    raffleState.keyword = keyword;
-    raffleState.subMult = parseFloat(subMult) || 1;
-    raffleState.giftMult = parseFloat(giftMult) || 1;
-    raffleState.startDate = new Date(startDate);
-    raffleState.endDate = new Date(endDate);
+    try {
+        // 1. OBTENER NOMBRE DEL STREAMER (Para que el bot sepa a qué chat ir)
+        const userRes = await axios.get('https://api.twitch.tv/helix/users', {
+            headers: { 
+                'Authorization': `Bearer ${accessToken}`, 
+                'Client-Id': process.env.TWITCH_CLIENT_ID 
+            }
+        });
+        const streamerLogin = userRes.data.data[0].login;
 
-    // Masive Pre Load
-    const baseUrl = `https://api.twitch.tv/helix/subscriptions?broadcaster_id=${twitchId}&first=100`;
-    const allSubs = await fetchAllTwitchData(baseUrl, accessToken);
+        // 2. UNIR EL BOT AL CHAT DINÁMICAMENTE
+        // El bot entra al canal del usuario que acaba de loguearse
+        await client.join(streamerLogin);
+        console.log(`🚀 Bot joined channel: ${streamerLogin}`);
 
-    // Identify current subscribers and count gifts sent
-    allSubs.forEach(sub => {
-      const subDate = new Date(sub.created_at);
-      const recipient = sub.user_name.toLowerCase();
-      const gifter = sub.gifter_name ? sub.gifter_name.toLowerCase() : null;
+        // 3. REINICIAR ESTADO DEL SORTEO
+        raffleState.active = false;
+        raffleState.participants.clear();
+        raffleState.cachedSubs.clear();
+        
+        raffleState.keyword = keyword;
+        raffleState.subMult = parseFloat(subMult) || 1;
+        raffleState.giftMult = parseFloat(giftMult) || 1;
+        raffleState.startDate = new Date(startDate);
+        raffleState.endDate = new Date(endDate);
 
-      // Registrar o actualizar datos del suscriptor
-      if (!raffleState.cachedSubs.has(recipient)) {
-        raffleState.cachedSubs.set(recipient, { isSub: true, giftsSent: 0 });
-      } else {
-        raffleState.cachedSubs.get(recipient).isSub = true;
-      }
+        // 4. PRE-CARGA MASIVA DE SUBS (Performance O(1))
+        const baseUrl = `https://api.twitch.tv/helix/subscriptions?broadcaster_id=${twitchId}&first=100`;
+        const allSubs = await fetchAllTwitchData(baseUrl, accessToken);
 
-      // Lógica de conteo de regalos enviados por fechas
-      if (sub.is_gift && gifter && subDate >= raffleState.startDate && subDate <= raffleState.endDate) {
-        if (!raffleState.cachedSubs.has(gifter)) {
-          raffleState.cachedSubs.set(gifter, { isSub: false, giftsSent: 1 });
-        } else {
-          raffleState.cachedSubs.get(gifter).giftsSent += 1;
-        }
-      }
-    });
+        allSubs.forEach(sub => {
+            const subDate = new Date(sub.created_at);
+            const recipient = sub.user_name.toLowerCase();
+            const gifter = sub.gifter_name ? sub.gifter_name.toLowerCase() : null;
 
-    // Register the subscriber (who receives the benefit of the subscription)
-    raffleState.active = true;
-    
-    res.json({ 
-      status: "success", 
-      message: `Sorteo activado. ${allSubs.length} subs cacheados correctamente.`,
-      totalSubsLoaded: allSubs.length 
-    });
+            // Cache status de suscriptor
+            if (!raffleState.cachedSubs.has(recipient)) {
+                raffleState.cachedSubs.set(recipient, { isSub: true, giftsSent: 0 });
+            } else {
+                raffleState.cachedSubs.get(recipient).isSub = true;
+            }
 
-  } catch (error) {
-    console.error("Error en Raffle Start:", error.response?.data || error.message);
-    res.status(500).json({ error: "Fallo al iniciar el sorteo y precargar datos." });
-  }
+            // Conteo de regalos en el rango de fechas
+            if (sub.is_gift && gifter && subDate >= raffleState.startDate && subDate <= raffleState.endDate) {
+                const gifterData = raffleState.cachedSubs.get(gifter) || { isSub: false, giftsSent: 0 };
+                gifterData.giftsSent += 1;
+                raffleState.cachedSubs.set(gifter, gifterData);
+            }
+        });
+
+        // 5. ACTIVAR ESCUCHA DE MENSAJES
+        raffleState.active = true;
+        
+        res.json({ 
+            status: "success", 
+            message: `Sorteo iniciado en el canal ${streamerLogin}.`,
+            totalSubs: allSubs.length 
+        });
+
+    } catch (error) {
+        console.error("Error in Raffle Start:", error.response?.data || error.message);
+        res.status(500).json({ error: "No se pudo iniciar el sorteo o unir el bot al chat." });
+    }
 });
 
 
@@ -357,6 +394,7 @@ app.post('/api/raffle/stop', (req, res) => {
  * logic: Processes keyword entries using the pre-loaded subscriber cache.
  * Efficiency: O(1) lookup time per message using Map.has() and Map.get().
  */
+
 client.on('message', (channel, tags, message, self) => {
   // Ignore if: raffle is inactive, message is from the bot, or keyword is missing
   if (!raffleState.active || self || !message.toLowerCase().includes(raffleState.keyword.toLowerCase())) {
