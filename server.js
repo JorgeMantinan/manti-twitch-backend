@@ -21,8 +21,6 @@ if (!process.env.TWITCH_ACCESS_TOKEN) {
   console.error("❌ TWITCH_ACCESS_TOKEN no está definido");
 }
 
-client.connect().catch(console.error);
-
 // Conectar a Twitch
 client.connect().catch(console.error);
 
