@@ -176,12 +176,11 @@ app.get('/api/chatters', verifyToken, async (req, res) => {
 });
 
 // Endpoint GET subs of twitch between dates
-app.get('/api/subs', verifyToken, async (req, res) => {
+app.post('/api/subs', verifyToken, async (req, res) => {
     try {
-        const { startDate, endDate } = req.query;
+        const { startDate, endDate } = req.body; 
         const { accessToken, twitchId } = req.user;
 
-        // Usamos nuestra función de paginación para no dejarnos ningún sub fuera
         const baseUrl = `https://api.twitch.tv/helix/subscriptions?broadcaster_id=${twitchId}&first=100`;
         const allSubs = await fetchAllTwitchData(baseUrl, accessToken);
 
@@ -197,15 +196,14 @@ app.get('/api/subs', verifyToken, async (req, res) => {
             subscribers: filteredSubs 
         });
     } catch (e) {
-        console.error("Error en Subs:", e.response?.data || e.message);
-        res.status(500).json({ error: "No se pudieron obtener tus suscripciones" });
+        res.status(500).json({ error: "Error en el servidor" });
     }
 });
 
 // Endpoint GET subs of twitch between dates WITH FILTERS GIFTERS
 app.get('/api/subs-history', verifyToken, async (req, res) => {
   const { startDate, endDate, subType } = req.query; 
-  const { accessToken, twitchId } = req.user; // Now this works!
+  const { accessToken, twitchId } = req.user;
 
   try {
     const url = `https://api.twitch.tv/helix/subscriptions?broadcaster_id=${twitchId}&first=100`;
@@ -241,7 +239,7 @@ let globalChatLogs = [];
 // ENDPOINT GET ACTIVE FOLLOWERS THAT HAVED CHATTED BETWEEN DATES
 app.get('/api/active-followers', verifyToken, async (req, res) => {
   const { startDate, endDate } = req.query;
-  const { accessToken, twitchId } = req.user; // Now this works!
+  const { accessToken, twitchId } = req.user;
 
   try {
     const url = `https://api.twitch.tv/helix/channels/followers?broadcaster_id=${twitchId}&first=100`;
