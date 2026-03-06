@@ -1,8 +1,8 @@
-import express from "express";
-import axios from "axios";
-import cors from "cors";
-import jwt from "jsonwebtoken";
-import dotenv from "dotenv";
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const axios = require('axios');
+const jwt = require('jsonwebtoken');
 
 dotenv.config();
 
