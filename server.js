@@ -130,7 +130,7 @@ app.get('/auth/twitch/callback', async (req, res) => {
 
     const twitchToken = response.data.access_token;
     const refreshToken = response.data.refresh_token;
-    const scopes = response.data.scope;
+    const scopes = response.data.scope || [];
 
     const userRes = await axios.get(
       'https://api.twitch.tv/helix/users',
