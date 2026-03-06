@@ -554,6 +554,6 @@ app.post('/api/raffle/pick-winner', (req, res) => {
   });
 });
 
-app.listen(process.env.TWITCH_CLIENT_ID , () => {
-  console.log(`Server running on port ${process.env.TWITCH_CLIENT_ID }`);
+app.listen(process.env.PORT , () => {
+  console.log(`Server running on port ${process.env.PORT }`);
 });
