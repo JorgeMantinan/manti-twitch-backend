@@ -50,7 +50,8 @@ const verifyToken = (req, res, next) => {
     req.user = {
       accessToken: decoded.twitchToken,
       refreshToken: decoded.refreshToken,
-      twitchId: decoded.twitchId
+      twitchId: decoded.twitchId,
+      scopes: decoded.scopes
     };
     next();
 
@@ -129,6 +130,7 @@ app.get('/auth/twitch/callback', async (req, res) => {
 
     const twitchToken = response.data.access_token;
     const refreshToken = response.data.refresh_token;
+    const scopes = response.data.scope;
 
     const userRes = await axios.get(
       'https://api.twitch.tv/helix/users',
@@ -146,7 +148,8 @@ app.get('/auth/twitch/callback', async (req, res) => {
       {
         twitchToken,
         refreshToken,
-        twitchId
+        twitchId,
+        scopes
       },
       process.env.JWT_SECRET,
       { expiresIn: '1d' }
