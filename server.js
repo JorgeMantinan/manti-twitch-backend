@@ -322,27 +322,31 @@ app.get('/api/chatters', verifyToken, async (req, res) => {
 });
 
 
-let globalChatLogs = [];
-// ENDPOINT GET ACTIVE FOLLOWERS THAT HAVED CHATTED BETWEEN DATES
-app.get('/api/active-followers', verifyToken, async (req, res) => {
+// ENDPOINT GET FOLLOWERS BETWEEN DATES
+// GET /api/followers-between-dates
+// GET /api/followers-between-dates?startDate=2024-01-01
+// GET /api/followers-between-dates?startDate=2024-01-01&endDate=2024-12-31
+app.get('/api/followers-between-dates', verifyToken, async (req, res) => {
   const { startDate, endDate } = req.query;
   const { accessToken, twitchId } = req.user;
 
   try {
+    const start = startDate ? new Date(startDate) : new Date(0);
+    const end = endDate ? new Date(endDate) : new Date();
+
     const url = `https://api.twitch.tv/helix/channels/followers?broadcaster_id=${twitchId}&first=100`;
+
     const allFollowers = await fetchAllTwitchData(url, accessToken);
 
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const activeChatters = new Set(
-      globalChatLogs
-        .filter(log => log.timestamp >= start && log.timestamp <= end)
-        .map(log => log.user.toLowerCase())
-    );
+    const followersBetweenDates = allFollowers.filter(follower => {
+      const followDate = new Date(follower.followed_at);
+      return followDate >= start && followDate <= end;
+    });
 
-    const result = allFollowers.filter(f => activeChatters.has(f.user_login.toLowerCase()));
-    res.json(result);
+    res.json(followersBetweenDates);
+
   } catch (error) {
+    console.error(error);
     res.status(500).send(error.message);
   }
 });
