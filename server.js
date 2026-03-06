@@ -184,16 +184,16 @@ app.post('/api/subs', verifyToken, async (req, res) => {
         const baseUrl = `https://api.twitch.tv/helix/subscriptions?broadcaster_id=${twitchId}&first=100`;
         const allSubs = await fetchAllTwitchData(baseUrl, accessToken);
 
-        const filteredSubs = allSubs.filter(sub => {
-            const subDate = new Date(sub.created_at);
-            const start = startDate ? new Date(startDate) : new Date(0);
-            const end = endDate ? new Date(endDate) : new Date();
-            return subDate >= start && subDate <= end;
-        });
+        const formattedSubs = allSubs.map(sub => ({
+          subscriber: sub.user_name,
+          tier: sub.tier,
+          isGift: sub.is_gift,
+          gifter: sub.is_gift ? sub.gifter_name : null
+        }));
 
-        res.json({ 
-            totalLoaded: allSubs.length,
-            subscribers: filteredSubs 
+        res.json({
+          totalSubs: formattedSubs.length,
+          subscribers: formattedSubs
         });
     } catch (e) {
         res.status(500).json({ error: "Error en el servidor" });
