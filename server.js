@@ -167,6 +167,18 @@ app.get('/auth/twitch/callback', async (req, res) => {
  * Functions
  */
 
+// Get Id of Nickname
+async function getTwitchIdByNick(nick, accessToken) {
+  const response = await fetch(`https://api.twitch.tv/helix/users?login=${nick}`, {
+    headers: {
+      'Authorization': `Bearer ${accessToken}`,
+      'Client-Id': process.env.TWITCH_CLIENT_ID
+    }
+  });
+  const data = await response.json();
+  return data.data?.[0]?.id || null; // Devuelve el ID o null si no existe
+}
+
 // High-Performance Pager
 async function fetchAllTwitchData(url, token) {
   let allData = [];
@@ -184,7 +196,6 @@ async function fetchAllTwitchData(url, token) {
       allData.push(...response.data.data);
       cursor = response.data.pagination?.cursor;
 
-      // Si nos quedan pocas peticiones en el "cubo" de Twitch, esperamos un poco
       const remaining = response.headers['ratelimit-remaining'];
       if (remaining && parseInt(remaining) < 10) {
         await new Promise(resolve => setTimeout(resolve, 1000));
@@ -326,28 +337,34 @@ app.get('/api/chatters', verifyToken, async (req, res) => {
 // GET /api/followers-between-dates
 // GET /api/followers-between-dates?startDate=2024-01-01
 // GET /api/followers-between-dates?startDate=2024-01-01&endDate=2024-12-31
-app.get('/api/followers-between-dates', verifyToken, async (req, res) => {
-  const { startDate, endDate } = req.query;
-  const { accessToken, twitchId } = req.user;
+app.post('/api/followers-between-dates', verifyToken, async (req, res) => {
+  const { startDate, endDate, streamerNick } = req.body; 
+  const { accessToken } = req.user; // Tu token de moderador
 
   try {
+    const targetId = await getTwitchIdByNick(streamerNick, accessToken);
+    
+    if (!targetId) {
+      return res.status(404).json({ error: "Streamer no encontrado" });
+    }
+
     const start = startDate ? new Date(startDate) : new Date(0);
     const end = endDate ? new Date(endDate) : new Date();
 
-    const url = `https://api.twitch.tv/helix/channels/followers?broadcaster_id=${twitchId}&first=100`;
-
+    const url = `https://api.twitch.tv/helix/channels/followers?broadcaster_id=${targetId}&first=100`;
     const allFollowers = await fetchAllTwitchData(url, accessToken);
 
-    const followersBetweenDates = allFollowers.filter(follower => {
-      const followDate = new Date(follower.followed_at);
+    // 4. Filtramos
+    const filtered = allFollowers.filter(f => {
+      const followDate = new Date(f.followed_at);
       return followDate >= start && followDate <= end;
     });
 
-    res.json(followersBetweenDates);
+    res.json(filtered);
 
   } catch (error) {
     console.error(error);
-    res.status(500).send(error.message);
+    res.status(500).json({ error: "Error al consultar la API de Twitch" });
   }
 });
 
