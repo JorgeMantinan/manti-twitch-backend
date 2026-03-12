@@ -4,9 +4,23 @@ const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const tmi = require('tmi.js');
 const dotenv = require('dotenv');
+const http = require('http');
+const { Server } = require('socket.io'); 
 
 const app = express();
 dotenv.config();
+
+const server = http.createServer(app); 
+const io = new Server(server, {
+    cors: {
+        origin: ['https://jorgemantinan.github.io',
+             'https://jorgemantinan.github.io/manti-twitch',
+             'https://jorgemantinan.github.io/manti-twitch/'],
+        methods: ["GET", "POST"]
+    }
+});
+
+app.set('socketio', io);
 
 // Configuración del bot de Twitch
 const client = new tmi.Client({
@@ -378,6 +392,7 @@ app.post('/api/followers-between-dates', verifyToken, async (req, res) => {
 */
 let raffleState = {
   active: false,
+  selectedStreamer: undefined,
   keyword: '',
   subMult: 1,
   giftMult: 1,
@@ -392,36 +407,41 @@ let raffleState = {
  * Logic: Authenticates, joins the streamer's chat, and pre-loads sub data.
  */
 app.post('/api/raffle/start', verifyToken, async (req, res) => {
-    const { keyword, subMult, giftMult, startDate, endDate } = req.body;
+    const { selectedStreamer, keyword, subMult, giftMult, startDate, endDate } = req.body;
     const { accessToken, twitchId } = req.user;
 
+    let streamerToJoin;
+
     try {
-        // 1. OBTENER NOMBRE DEL STREAMER (Para que el bot sepa a qué chat ir)
-        const userRes = await axios.get('https://api.twitch.tv/helix/users', {
-            headers: { 
-                'Authorization': `Bearer ${accessToken}`, 
-                'Client-Id': process.env.TWITCH_CLIENT_ID 
-            }
-        });
-        const streamerLogin = userRes.data.data[0].login;
 
-        // 2. UNIR EL BOT AL CHAT DINÁMICAMENTE
-        // El bot entra al canal del usuario que acaba de loguearse
-        await client.join(streamerLogin);
-        console.log(`🚀 Bot joined channel: ${streamerLogin}`);
+      if (!selectedStreamer) {
+            const userRes = await axios.get('https://api.twitch.tv/helix/users', {
+                headers: { 
+                    'Authorization': `Bearer ${accessToken}`, 
+                    'Client-Id': process.env.TWITCH_CLIENT_ID 
+                }
+            });
+            streamerToJoin = userRes.data.data[0].login;
+        } else {
+            streamerToJoin = selectedStreamer;
+        }
 
-        // 3. REINICIAR ESTADO DEL SORTEO
+        await client.join(streamerToJoin);
+        console.log(`🚀 Bot joined channel: ${streamerToJoin}`);
+
+        // REINICIAR ESTADO DEL SORTEO
         raffleState.active = false;
         raffleState.participants.clear();
         raffleState.cachedSubs.clear();
         
+        raffleState.selectedStreamer = streamerToJoin;
         raffleState.keyword = keyword;
         raffleState.subMult = parseFloat(subMult) || 1;
         raffleState.giftMult = parseFloat(giftMult) || 1;
         raffleState.startDate = new Date(startDate);
         raffleState.endDate = new Date(endDate);
 
-        // 4. PRE-CARGA MASIVA DE SUBS (Performance O(1))
+        // PRE-CARGA MASIVA DE SUBS (Performance O(1))
         const baseUrl = `https://api.twitch.tv/helix/subscriptions?broadcaster_id=${twitchId}&first=100`;
         const allSubs = await fetchAllTwitchData(baseUrl, accessToken);
 
@@ -445,12 +465,11 @@ app.post('/api/raffle/start', verifyToken, async (req, res) => {
             }
         });
 
-        // 5. ACTIVAR ESCUCHA DE MENSAJES
+        // ACTIVAR ESCUCHA DE MENSAJES
         raffleState.active = true;
-        
         res.json({ 
             status: "success", 
-            message: `Sorteo iniciado en el canal ${streamerLogin}.`,
+            message: `Sorteo iniciado en el canal ${streamerToJoin}.`,
             totalSubs: allSubs.length 
         });
 
@@ -500,7 +519,6 @@ app.post('/api/raffle/stop', (req, res) => {
  */
 
 client.on('message', (channel, tags, message, self) => {
-  // Ignore if: raffle is inactive, message is from the bot, or keyword is missing
   if (!raffleState.active || self || !message.toLowerCase().includes(raffleState.keyword.toLowerCase())) {
     return;
   }
@@ -508,39 +526,28 @@ client.on('message', (channel, tags, message, self) => {
   const username = tags.username.toLowerCase();
   const displayName = tags['display-name'];
 
-  // Prevent duplicate entries from the same user to save CPU cycles
   if (raffleState.participants.has(username)) return;
 
-  // 1. Set Base Entry Point (Standard for all viewers)
   let totalPoints = 1;
-
-  /**
-   * 2. Subscriber & Gifter Logic
-   * Lookup user data in the O(1) memory cache pre-loaded at 'raffle/start'.
-   */
   const userData = raffleState.cachedSubs.get(username);
 
   if (userData) {
-    // Apply Multiplier if the user is a current Subscriber
-    if (userData.isSub) {
-      totalPoints *= raffleState.subMult;
-    }
-    
-    // Add Bonus Points for Sub-Gifts sent within the specified Date Range
-    if (userData.giftsSent > 0) {
-      totalPoints += (userData.giftsSent * raffleState.giftMult);
-    }
+    if (userData.isSub) totalPoints *= raffleState.subMult;
+    if (userData.giftsSent > 0) totalPoints += (userData.giftsSent * raffleState.giftMult);
   }
 
-  /**
-   * 3. Register Participant
-   * We store the Display Name (correct casing) and calculated points.
-   */
-  raffleState.participants.set(username, {
+  const newParticipant = {
     username: displayName,
     points: totalPoints,
     isSub: userData ? userData.isSub : false,
     giftsSent: userData ? userData.giftsSent : 0
+  };
+
+  raffleState.participants.set(username, newParticipant);
+
+  io.emit('newParticipant', {
+      participant: newParticipant,
+      totalCount: raffleState.participants.size
   });
 });
 
@@ -578,6 +585,6 @@ app.post('/api/raffle/pick-winner', (req, res) => {
   });
 });
 
-app.listen(process.env.PORT , () => {
-  console.log(`Server running on port ${process.env.PORT }`);
+server.listen(process.env.PORT , () => {
+  console.log(`Server running on port ${process.env.PORT}`);
 });
