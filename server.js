@@ -426,7 +426,9 @@ app.post('/api/raffle/start', verifyToken, async (req, res) => {
             streamerToJoin = selectedStreamer;
         }
 
-        await client.join(streamerToJoin);
+        if (!client.getChannels().includes(`#${streamerToJoin}`)) {
+            await client.join(streamerToJoin);
+        }
         console.log(`🚀 Bot joined channel: ${streamerToJoin}`);
 
         // REINICIAR ESTADO DEL SORTEO
@@ -438,8 +440,8 @@ app.post('/api/raffle/start', verifyToken, async (req, res) => {
         raffleState.keyword = keyword;
         raffleState.subMult = parseFloat(subMult) || 1;
         raffleState.giftMult = parseFloat(giftMult) || 1;
-        raffleState.startDate = new Date(startDate);
-        raffleState.endDate = new Date(endDate);
+        raffleState.startDate = startDate ? new Date(startDate) : new Date(0);
+        raffleState.endDate = endDate ? new Date(endDate) : new Date();
 
         // PRE-CARGA MASIVA DE SUBS (Performance O(1))
         const baseUrl = `https://api.twitch.tv/helix/subscriptions?broadcaster_id=${twitchId}&first=100`;
@@ -545,10 +547,10 @@ client.on('message', (channel, tags, message, self) => {
 
   raffleState.participants.set(username, newParticipant);
 
-  io.emit('newParticipant', {
+  io.to(streamerToJoin).emit('newParticipant', {
       participant: newParticipant,
       totalCount: raffleState.participants.size
-  });
+  })
 });
 
 /**
