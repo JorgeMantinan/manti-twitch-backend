@@ -20,6 +20,18 @@ const io = new Server(server, {
     }
 });
 
+io.on("connection", (socket) => {
+  console.log("🟢 Socket conectado:", socket.id);
+  socket.on("joinRoom", ({ streamer }) => {
+  const room = streamer || "default";
+  console.log(`📡 Socket ${socket.id} joined room: ${room}`);
+  socket.join(room);
+});
+  socket.on("disconnect", () => {
+    console.log("🔴 Socket desconectado:", socket.id);
+  });
+});
+
 app.set('socketio', io);
 
 // Configuración del bot de Twitch
@@ -547,10 +559,10 @@ client.on('message', (channel, tags, message, self) => {
 
   raffleState.participants.set(username, newParticipant);
 
-  io.to(raffleState.selectedStreamer).emit('newParticipant', {
-      participant: newParticipant,
-      totalCount: raffleState.participants.size
-  })
+  io.to(raffleState.selectedStreamer || "default").emit('newParticipant', {
+    participant: newParticipant,
+    totalCount: raffleState.participants.size
+  });
 });
 
 /**
