@@ -11,7 +11,7 @@ const app = express();
 dotenv.config();
 
 const server = http.createServer(app); 
-const io = new Server(server, {
+const io = new Server(server, { 
     cors: {
         origin: ['https://jorgemantinan.github.io',
              'https://jorgemantinan.github.io/manti-twitch',
