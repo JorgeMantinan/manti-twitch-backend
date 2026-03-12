@@ -547,7 +547,7 @@ client.on('message', (channel, tags, message, self) => {
 
   raffleState.participants.set(username, newParticipant);
 
-  io.to(streamerToJoin).emit('newParticipant', {
+  io.to(raffleState.selectedStreamer).emit('newParticipant', {
       participant: newParticipant,
       totalCount: raffleState.participants.size
   })
