@@ -30,9 +30,177 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => {
     console.log("🔴 Socket desconectado:", socket.id);
   });
+
+
+    /*
+  ===========================
+  JOIN BINGO ROOM
+  ===========================
+  */
+
+  socket.on("bingo:join",({streamer})=>{
+
+      const roomName = `bingo:${streamer}`
+
+      socket.join(roomName)
+
+      getBingoRoom(streamer)
+
+  })
+
+  /*
+  ===========================
+  START GAME
+  ===========================
+  */
+
+  socket.on("bingo:start",({streamer,cards})=>{
+
+      const room = getBingoRoom(streamer)
+
+      room.cards = cards
+      room.drawn = []
+      room.started = true
+      room.lineWinner = null
+      room.bingoWinner = null
+
+  })
+
+  /*
+  ===========================
+  DRAW NUMBER
+  ===========================
+  */
+
+  socket.on("bingo:draw",({streamer})=>{
+
+      const room = getBingoRoom(streamer)
+
+      const n = drawBingoNumber(room)
+
+      if(!n) return
+
+      io.to(`bingo:${streamer}`).emit("bingo:number",n)
+
+      for(const player in room.cards){
+
+          const card = room.cards[player]
+
+          if(!room.lineWinner){
+
+              if(checkLine(card,room.drawn)){
+
+                  room.lineWinner = player
+
+                  io.to(`bingo:${streamer}`).emit("bingo:line",player)
+
+              }
+
+          }
+
+          if(!room.bingoWinner){
+
+              if(checkBingo(card,room.drawn)){
+
+                  room.bingoWinner = player
+
+                  io.to(`bingo:${streamer}`).emit("bingo:bingo",player)
+
+              }
+
+          }
+
+      }
+
+  })
+
 });
 
 app.set('socketio', io);
+
+/*
+================================
+BINGO ENGINE ULTRA PRO
+================================
+*/
+
+const bingoRooms = {}
+
+function createBingoRoom(streamer){
+
+    bingoRooms[streamer] = {
+        drawn:[],
+        cards:{},
+        started:false,
+        lineWinner:null,
+        bingoWinner:null
+    }
+
+}
+
+function getBingoRoom(streamer){
+
+    if(!bingoRooms[streamer])
+        createBingoRoom(streamer)
+
+    return bingoRooms[streamer]
+}
+
+function drawBingoNumber(room){
+
+    if(room.drawn.length>=90)
+        return null
+
+    let n
+
+    do{
+        n = Math.floor(Math.random()*90)+1
+    }
+    while(room.drawn.includes(n))
+
+    room.drawn.push(n)
+
+    return n
+}
+
+function checkLine(card,drawn){
+
+    for(let r=0;r<3;r++){
+
+        let hits=0
+
+        for(let c=0;c<9;c++){
+
+            const n = card[r][c]
+
+            if(n && drawn.includes(n))
+                hits++
+
+        }
+
+        if(hits===5)
+            return true
+    }
+
+    return false
+}
+
+function checkBingo(card,drawn){
+
+    let hits=0
+
+    for(let r=0;r<3;r++)
+        for(let c=0;c<9;c++){
+
+            const n = card[r][c]
+
+            if(n && drawn.includes(n))
+                hits++
+
+        }
+
+    return hits===15
+}
 
 // Configuración del bot de Twitch
 const client = new tmi.Client({
