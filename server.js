@@ -43,6 +43,8 @@ io.on("connection", (socket) => {
     const roomName = `bingo:${streamer}`;
 
     socket.join(roomName);
+    console.log("📡 JOIN BINGO ROOM:", roomName);
+    console.log("Rooms del socket:", socket.rooms);
 
     getBingoRoom(streamer);
   });
@@ -88,8 +90,10 @@ io.on("connection", (socket) => {
     }
 
     console.log("🎱 NUMBER DRAWN:", n);
+    console.log("EMITIENDO A:", `bingo:${streamer}`);
 
-    io.to(`bingo:${streamer}`).emit("bingo:number", n);
+    // io.to(`bingo:${streamer}`).emit("bingo:number", n);
+    io.emit("bingo:number", n);
 
     for (const player in room.cards) {
       const card = room.cards[player];
