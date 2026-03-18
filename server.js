@@ -555,6 +555,7 @@ app.post("/api/raffle/start", verifyToken, async (req, res) => {
 
   raffleState.game = game;
   raffleState.selectedStreamer = streamer;
+  raffleState.twitchChannel = streamerToJoin;
 
   try {
     if (!selectedStreamer) {
@@ -579,7 +580,7 @@ app.post("/api/raffle/start", verifyToken, async (req, res) => {
     raffleState.participants.clear();
     raffleState.cachedSubs.clear();
 
-    raffleState.selectedStreamer = streamer;
+    raffleState.twitchChannel = streamerToJoin;
     raffleState.keyword = keyword;
     raffleState.subMult = parseFloat(subMult) || 1;
     raffleState.giftMult = parseFloat(giftMult) || 1;
@@ -674,16 +675,15 @@ app.post("/api/raffle/stop", (req, res) => {
  */
 
 client.on("message", (channel, tags, message, self) => {
-  if (
-    !raffleState.active ||
-    self ||
-    !message.toLowerCase().includes(raffleState.keyword.toLowerCase())
-  ) {
-    return;
-  }
+  if (!raffleState.active || self) return;
+  if (channel.replace("#", "") !== raffleState.twitchChannel) return;
+  if (!message.toLowerCase().includes(raffleState.keyword.toLowerCase())) return;
 
   const username = tags.username.toLowerCase();
   const displayName = tags["display-name"];
+
+  console.log("💬 MSG:", channel, message);
+  console.log("✅ PARTICIPANT ADDED:", username);
 
   if (raffleState.participants.has(username)) return;
 
