@@ -533,7 +533,7 @@ app.post("/api/followers-between-dates", verifyToken, async (req, res) => {
 let raffleState = {
   active: false,
   selectedStreamer: undefined,
-  game = "roulette",
+  game: "roulette",
   keyword: "",
   subMult: 1,
   giftMult: 1,
