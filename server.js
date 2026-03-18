@@ -23,32 +23,22 @@ const io = new Server(server, {
 });
 
 io.on("connection", (socket) => {
-  console.log("🟢 Socket conectado:", socket.id);
-  socket.on("joinRoom", ({ streamer }) => {
-    const room = streamer || "default";
-    console.log(`📡 Socket ${socket.id} joined room: ${room}`);
+
+  function getRoom(game, streamer) {
+    return `${game}:${streamer}`;
+  }
+
+  socket.on("joinRoom", ({ game, streamer }) => {
+    const room = getRoom(game, streamer);
+
     socket.join(room);
+
+    console.log(`📡 ${socket.id} joined ${room}`);
+
+    if (game === "bingo") {
+      getBingoRoom(streamer);
+    }
   });
-  socket.on("disconnect", () => {
-    console.log("🔴 Socket desconectado:", socket.id);
-  });
-
-  /*
-  ===========================
-  JOIN BINGO ROOM
-  ===========================
-  */
-
-  socket.on("bingo:join", ({ streamer }) => {
-    const roomName = `bingo:${streamer}`;
-
-    socket.join(roomName);
-    console.log("📡 JOIN BINGO ROOM:", roomName);
-    console.log("Rooms del socket:", socket.rooms);
-
-    getBingoRoom(streamer);
-  });
-
   /*
   ===========================
   START GAME
@@ -64,8 +54,6 @@ io.on("connection", (socket) => {
     room.lineWinner = null;
     room.bingoWinner = null;
 
-    console.log("🎮 BINGO STARTED", streamer);
-    console.log("🧾 Cards:", Object.keys(cards).length);
   });
 
   /*
@@ -89,11 +77,7 @@ io.on("connection", (socket) => {
       return;
     }
 
-    console.log("🎱 NUMBER DRAWN:", n);
-    console.log("EMITIENDO A:", `bingo:${streamer}`);
-
-    // io.to(`bingo:${streamer}`).emit("bingo:number", n);
-    io.emit("bingo:number", n);
+    io.to(getRoom("bingo", streamer)).emit("bingo:number", n);
 
     for (const player in room.cards) {
       const card = room.cards[player];
@@ -102,7 +86,7 @@ io.on("connection", (socket) => {
         if (checkLine(card, room.drawn)) {
           room.lineWinner = player;
 
-          io.to(`bingo:${streamer}`).emit("bingo:line", player);
+          io.to(getRoom("bingo", streamer)).emit("bingo:line", player);
         }
       }
 
@@ -110,7 +94,7 @@ io.on("connection", (socket) => {
         if (checkBingo(card, room.drawn)) {
           room.bingoWinner = player;
 
-          io.to(`bingo:${streamer}`).emit("bingo:bingo", player);
+          io.to(getRoom("bingo", streamer)).emit("bingo:bingo", player);
         }
       }
     }
@@ -718,7 +702,7 @@ client.on("message", (channel, tags, message, self) => {
 
   raffleState.participants.set(username, newParticipant);
 
-  io.to(raffleState.selectedStreamer || "default").emit("newParticipant", {
+  io.to(getRoom("roulette", raffleState.selectedStreamer)).emit("newParticipant", {
     participant: newParticipant,
     totalCount: raffleState.participants.size,
   });
