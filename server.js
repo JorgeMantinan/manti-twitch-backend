@@ -559,6 +559,12 @@ app.post("/api/raffle/start", verifyToken, async (req, res) => {
   endDate
 } = req.body;
   const { accessToken, twitchId } = req.user;
+  
+  console.log("streamer: ", streamer);
+  console.log("twitchChannel: ", twitchChannel);
+  console.log("game: ", game);
+  console.log("keyword: ", keyword);
+
 
   let streamerToJoin;
 
@@ -567,18 +573,24 @@ app.post("/api/raffle/start", verifyToken, async (req, res) => {
 
   try {
     if (!twitchChannel) {
+      console.log("ENTRA !twitchChannel");
       const userRes = await axios.get("https://api.twitch.tv/helix/users", {
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "Client-Id": process.env.TWITCH_CLIENT_ID,
         },
       });
+      console.log("1. Joining channel:", streamerToJoin);
       streamerToJoin = userRes.data.data[0].login;
+      console.log("2. Joining channel:", streamerToJoin);
     } else {
+      console.log("ENTRA ELSE !twitchChannel");
       streamerToJoin = streamer;
+      console.log("ENTRA ELSE !twitchChannel: ", streamerToJoin , ' streamer: ', streamer);
     }
 
     if (!client.getChannels().includes(`#${streamerToJoin}`)) {
+      console.log("ENTRA await");
       await client.join(streamerToJoin);
     }
     console.log(`🚀 Bot joined channel: ${streamerToJoin}`);
@@ -590,6 +602,9 @@ app.post("/api/raffle/start", verifyToken, async (req, res) => {
 
     raffleState.twitchChannel = streamerToJoin; // real streamer channel
     raffleState.selectedStreamer = streamer; // uuid socket room
+
+    console.log("raffleState.twitchChannel: ", raffleState.twitchChannel, ' streamerToJoin: ', streamerToJoin);
+    console.log("raffleState.selectedStreamer: ", raffleState.selectedStreamer, ' streamer: ', streamer);
 
     raffleState.keyword = keyword;
     raffleState.subMult = parseFloat(subMult) || 1;
