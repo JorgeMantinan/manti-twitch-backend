@@ -584,7 +584,7 @@ app.post("/api/raffle/start", verifyToken, async (req, res) => {
       console.log("2. Joining channel:", streamerToJoin);
     } else {
       console.log("ENTRA ELSE !twitchChannel");
-      streamerToJoin = streamer;
+      streamerToJoin = twitchChannel;
       console.log("ENTRA ELSE !twitchChannel: ", streamerToJoin , ' streamer: ', streamer);
     }
 
@@ -593,6 +593,10 @@ app.post("/api/raffle/start", verifyToken, async (req, res) => {
       await client.join(streamerToJoin);
     }
     console.log(`🚀 Bot joined channel: ${streamerToJoin}`);
+
+    console.log("ROOM (app): ", streamer);
+    console.log("TWITCH CHANNEL: ", twitchChannel);
+    console.log("JOINING: ", streamerToJoin);
 
     // REINICIAR ESTADO DEL SORTEO
     raffleState.active = false;
