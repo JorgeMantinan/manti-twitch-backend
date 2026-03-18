@@ -33,7 +33,8 @@ io.on("connection", (socket) => {
 
     socket.join(room);
 
-    console.log(`📡 ${socket.id} joined ${room}`);
+    socket.data = socket.data || {};
+    socket.data[game] = streamer;
 
     if (game === "bingo") {
       getBingoRoom(streamer);
@@ -45,7 +46,10 @@ io.on("connection", (socket) => {
   ===========================
   */
 
-  socket.on("bingo:start", ({ streamer, cards }) => {
+  socket.on("bingo:start", ({ cards }) => {
+    const streamer = socket.data.bingo;
+    if (!streamer) return;
+
     const room = getBingoRoom(streamer);
 
     room.cards = cards;
@@ -53,7 +57,6 @@ io.on("connection", (socket) => {
     room.started = true;
     room.lineWinner = null;
     room.bingoWinner = null;
-
   });
 
   /*
@@ -62,7 +65,10 @@ io.on("connection", (socket) => {
   ===========================
   */
 
-  socket.on("bingo:draw", ({ streamer }) => {
+  socket.on("bingo:draw", () => {
+    const streamer = socket.data.bingo;
+    if (!streamer) return;
+
     const room = getBingoRoom(streamer);
 
     if (!room.started) {
@@ -82,20 +88,14 @@ io.on("connection", (socket) => {
     for (const player in room.cards) {
       const card = room.cards[player];
 
-      if (!room.lineWinner) {
-        if (checkLine(card, room.drawn)) {
-          room.lineWinner = player;
-
-          io.to(getRoom("bingo", streamer)).emit("bingo:line", player);
-        }
+      if (!room.lineWinner && checkLine(card, room.drawn)) {
+        room.lineWinner = player;
+        io.to(getRoom("bingo", streamer)).emit("bingo:line", player);
       }
 
-      if (!room.bingoWinner) {
-        if (checkBingo(card, room.drawn)) {
-          room.bingoWinner = player;
-
-          io.to(getRoom("bingo", streamer)).emit("bingo:bingo", player);
-        }
+      if (!room.bingoWinner && checkBingo(card, room.drawn)) {
+        room.bingoWinner = player;
+        io.to(getRoom("bingo", streamer)).emit("bingo:bingo", player);
       }
     }
   });
@@ -547,8 +547,7 @@ let raffleState = {
  * Logic: Authenticates, joins the streamer's chat, and pre-loads sub data.
  */
 app.post("/api/raffle/start", verifyToken, async (req, res) => {
-  const { selectedStreamer, keyword, subMult, giftMult, startDate, endDate } =
-    req.body;
+  const { streamer, keyword, subMult, giftMult, startDate, endDate } = req.body;
   const { accessToken, twitchId } = req.user;
 
   let streamerToJoin;
@@ -576,7 +575,7 @@ app.post("/api/raffle/start", verifyToken, async (req, res) => {
     raffleState.participants.clear();
     raffleState.cachedSubs.clear();
 
-    raffleState.selectedStreamer = streamerToJoin;
+    raffleState.selectedStreamer = streamer;
     raffleState.keyword = keyword;
     raffleState.subMult = parseFloat(subMult) || 1;
     raffleState.giftMult = parseFloat(giftMult) || 1;
