@@ -548,7 +548,16 @@ let raffleState = {
  * Logic: Authenticates, joins the streamer's chat, and pre-loads sub data.
  */
 app.post("/api/raffle/start", verifyToken, async (req, res) => {
-  const { streamer, game = "roulette", keyword, subMult, giftMult, startDate, endDate } = req.body;
+  const {
+  streamer,
+  twitchChannel,
+  game = "roulette",
+  keyword,
+  subMult,
+  giftMult,
+  startDate,
+  endDate
+} = req.body;
   const { accessToken, twitchId } = req.user;
 
   let streamerToJoin;
@@ -557,7 +566,7 @@ app.post("/api/raffle/start", verifyToken, async (req, res) => {
   raffleState.selectedStreamer = streamer;
 
   try {
-    if (!streamer) {
+    if (!twitchChannel) {
       const userRes = await axios.get("https://api.twitch.tv/helix/users", {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -579,7 +588,9 @@ app.post("/api/raffle/start", verifyToken, async (req, res) => {
     raffleState.participants.clear();
     raffleState.cachedSubs.clear();
 
-    raffleState.twitchChannel = streamerToJoin;
+    raffleState.twitchChannel = streamerToJoin; // real streamer channel
+    raffleState.selectedStreamer = streamer; // uuid socket room
+
     raffleState.keyword = keyword;
     raffleState.subMult = parseFloat(subMult) || 1;
     raffleState.giftMult = parseFloat(giftMult) || 1;
