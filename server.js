@@ -555,10 +555,9 @@ app.post("/api/raffle/start", verifyToken, async (req, res) => {
 
   raffleState.game = game;
   raffleState.selectedStreamer = streamer;
-  raffleState.twitchChannel = streamerToJoin;
 
   try {
-    if (!selectedStreamer) {
+    if (!streamer) {
       const userRes = await axios.get("https://api.twitch.tv/helix/users", {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -567,7 +566,7 @@ app.post("/api/raffle/start", verifyToken, async (req, res) => {
       });
       streamerToJoin = userRes.data.data[0].login;
     } else {
-      streamerToJoin = selectedStreamer;
+      streamerToJoin = streamer;
     }
 
     if (!client.getChannels().includes(`#${streamerToJoin}`)) {
