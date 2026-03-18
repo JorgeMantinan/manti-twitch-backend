@@ -559,12 +559,6 @@ app.post("/api/raffle/start", verifyToken, async (req, res) => {
   endDate
 } = req.body;
   const { accessToken, twitchId } = req.user;
-  
-  console.log("streamer: ", streamer);
-  console.log("twitchChannel: ", twitchChannel);
-  console.log("game: ", game);
-  console.log("keyword: ", keyword);
-
 
   let streamerToJoin;
 
@@ -572,6 +566,11 @@ app.post("/api/raffle/start", verifyToken, async (req, res) => {
   raffleState.selectedStreamer = streamer;
 
   try {
+    console.log("ENTRA EN EL TRY!")
+    console.log("streamer: ", streamer);
+    console.log("twitchChannel: ", twitchChannel);
+    console.log("game: ", game);
+    console.log("keyword: ", keyword);
     if (!twitchChannel) {
       console.log("ENTRA !twitchChannel");
       const userRes = await axios.get("https://api.twitch.tv/helix/users", {
