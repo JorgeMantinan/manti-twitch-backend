@@ -533,6 +533,7 @@ app.post("/api/followers-between-dates", verifyToken, async (req, res) => {
 let raffleState = {
   active: false,
   selectedStreamer: undefined,
+  game = "roulette",
   keyword: "",
   subMult: 1,
   giftMult: 1,
@@ -547,10 +548,13 @@ let raffleState = {
  * Logic: Authenticates, joins the streamer's chat, and pre-loads sub data.
  */
 app.post("/api/raffle/start", verifyToken, async (req, res) => {
-  const { streamer, keyword, subMult, giftMult, startDate, endDate } = req.body;
+  const { streamer, game = "roulette", keyword, subMult, giftMult, startDate, endDate } = req.body;
   const { accessToken, twitchId } = req.user;
 
   let streamerToJoin;
+
+  raffleState.game = game;
+  raffleState.selectedStreamer = streamer;
 
   try {
     if (!selectedStreamer) {
@@ -701,7 +705,7 @@ client.on("message", (channel, tags, message, self) => {
 
   raffleState.participants.set(username, newParticipant);
 
-  io.to(getRoom("roulette", raffleState.selectedStreamer)).emit("newParticipant", {
+  io.to(getRoom(raffleState.game, raffleState.selectedStreamer)).emit("newParticipant", {
     participant: newParticipant,
     totalCount: raffleState.participants.size,
   });
