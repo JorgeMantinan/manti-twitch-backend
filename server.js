@@ -22,11 +22,11 @@ const io = new Server(server, {
   },
 });
 
-io.on("connection", (socket) => {
-
-  function getRoom(game, streamer) {
+function getRoom(game, streamer) {
     return `${game}:${streamer}`;
   }
+
+io.on("connection", (socket) => {
 
   socket.on("joinRoom", ({ game, streamer }) => {
     const room = getRoom(game, streamer);
