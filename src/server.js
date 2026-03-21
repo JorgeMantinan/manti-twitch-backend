@@ -4,7 +4,7 @@ const http = require('http');
 const express = require('express');
 const { Server } = require("socket.io");
 const cors = require('cors');
-const config = require('./config');
+const config = require("../config/index");
 
 const app = express();
 const server = http.createServer(app);

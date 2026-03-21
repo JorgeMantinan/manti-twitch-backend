@@ -1,5 +1,5 @@
 const { fetchAll, twitchAPI, refreshTokens } = require("../services/twitchAPI");
-const config = require("../config");
+const config = require("../config/index");
 
 let subsCache = { data: null, timestamp: 0 };
 

@@ -1,7 +1,7 @@
 const raffleManager = require("../services/raffleManager");
 const { fetchAll, refreshTokens, twitchAPI } = require("../services/twitchAPI");
 const { getClient } = require("../services/tmiClient");
-const config = require("../config");
+const config = require("../config/index");
 
 exports.startRaffle = async (req, res) => {
   const { streamer, twitchChannel, game, keyword, subMult, giftMult, startDate, endDate } = req.body;

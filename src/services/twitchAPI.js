@@ -4,20 +4,29 @@ const twitchAPI = axios.create({
   baseURL: "https://api.twitch.tv/helix",
 });
 
-// Helper para paginación masiva
-async function fetchAll(url, token) {
+async function fetchAll(endpoint, token) {
   let allData = [];
   let cursor = "";
+  
+  const fullUrl = endpoint.startsWith("http") 
+    ? endpoint 
+    : `https://api.twitch.tv/helix${endpoint}`;
+
   do {
-    const response = await axios.get(`${url}${cursor ? `&after=${cursor}` : ""}`, {
+    const separator = fullUrl.includes("?") ? "&" : "?";
+    const urlWithCursor = `${fullUrl}${cursor ? `${separator}after=${cursor}` : ""}`;
+    
+    const response = await axios.get(urlWithCursor, {
       headers: { 
         Authorization: `Bearer ${token}`, 
         "Client-Id": process.env.TWITCH_CLIENT_ID 
       },
     });
+    
     allData.push(...response.data.data);
     cursor = response.data.pagination?.cursor;
   } while (cursor);
+  
   return allData;
 }
 
@@ -43,4 +52,4 @@ async function getStreamerLogin(token) {
     return res.data.data[0].login;
 }
 
-module.exports = { fetchAll, refreshTokens, twitchAPI , getStreamerLogin};
+module.exports = { fetchAll, refreshTokens, twitchAPI, getStreamerLogin };
