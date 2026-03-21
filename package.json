@@ -1,11 +1,12 @@
 {
   "name": "manti-twitch-backend",
-  "version": "1.2.1",
+  "version": "1.3.0",
   "description": "",
-  "main": "server.js",
+  "main": "src/server.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "start": "node server.js"
+    "start": "node src/server.js",
+    "dev": "nodemon src/server/js"
   },
   "keywords": [],
   "author": "",
