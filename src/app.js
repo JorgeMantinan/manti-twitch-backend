@@ -2,16 +2,23 @@ const express = require("express");
 const cors = require("cors");
 const config = require("./config/index");
 
-const app = express();
+function createApp(io) {
+  const app = express();
 
-app.use(cors({ origin: config.corsOrigins }));
-app.use(express.json());
+  app.use(cors({ origin: config.corsOrigins }));
+  app.use(express.json());
 
-// ROUTES
-app.use("/auth", require("./routes/auth"));
-app.use("/api/twitch", require("./routes/twitch"));
-app.use("/api/raffle", require("./routes/raffle"));
+  if (io) {
+    app.set("socketio", io);
+  }
 
-app.get("/", (req, res) => res.send("🚀🚀🚀🚀🚀"));
+  app.use("/auth", require("./routes/auth"));
+  app.use("/api/twitch", require("./routes/twitch"));
+  app.use("/api/raffle", require("./routes/raffle"));
 
-module.exports = app;
+  app.get("/", (req, res) => res.send("🚀🚀🚀🚀🚀"));
+
+  return app;
+}
+
+module.exports = createApp;
