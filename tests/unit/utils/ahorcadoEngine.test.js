@@ -275,6 +275,7 @@ describe('ahorcadoEngine', () => {
       const res = processChatGuess('guesschan', 'alice', 'Alice', 'Manti perro', {});
       expect(res.kind).toBe('win');
       expect(res.player.name).toBe('Alice');
+      expect(res.phrase).toBe('Manti perro');
       expect(getAhorcadoRoom('guessstreamer').guessed).toBe(true);
     });
 

@@ -148,7 +148,7 @@ const processChatGuess = (channel, username, displayName, guess, tags) => {
 
     const player = registerPlayer(room, username, displayName);
     markGuessed(channel);
-    return { kind: "win", streamer: game.streamer, player: { name: player.username } };
+    return { kind: "win", streamer: game.streamer, phrase: game.phrase, player: { name: player.username } };
 };
 
 module.exports = {

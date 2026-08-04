@@ -38,6 +38,7 @@ const initTmi = (io) => {
                 } else if (result?.kind === "win") {
                     io.to(`ahorcado:${result.streamer}`).emit("ahorcado:guessed", {
                         player: result.player.name,
+                        phrase: result.phrase,
                     });
                 }
             }

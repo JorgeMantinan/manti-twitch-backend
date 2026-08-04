@@ -1,6 +1,21 @@
+const jwt = require("jsonwebtoken");
 const { getBingoRoom, drawNumber, checkLine, checkBingo } = require("../utils/bingoEngine");
 const { getAhorcadoRoom, pickPhrase, drawLetter, isComplete, setActiveGame, clearActiveGame } = require("../utils/ahorcadoEngine");
 const { getClient } = require("../services/tmiClient");
+const { getStreamerLogin, refreshTokens } = require("../services/twitchAPI");
+
+const resolveChannelFromToken = async (token) => {
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  try {
+    return await getStreamerLogin(decoded.twitchToken);
+  } catch (err) {
+    if (err.response?.status === 401) {
+      const tokens = await refreshTokens(decoded.refreshToken);
+      return await getStreamerLogin(tokens.access_token);
+    }
+    throw err;
+  }
+};
 
 module.exports = (io) => {
   io.on("connection", (socket) => {
@@ -61,9 +76,19 @@ module.exports = (io) => {
     });
 
     // Ahorcado game
-    socket.on("ahorcado:start", ({ streamer, twitchChannel, subsOnly }) => {
+    socket.on("ahorcado:start", async ({ streamer, twitchChannel, subsOnly, token }) => {
       const activeStreamer = socket.data?.ahorcado;
       if (!activeStreamer) return;
+
+      let channel = twitchChannel;
+      if (!channel && token) {
+        try {
+          channel = await resolveChannelFromToken(token);
+        } catch (err) {
+          console.error("Ahorcado: no se pudo resolver el canal:", err.message);
+        }
+      }
+
       const room = getAhorcadoRoom(activeStreamer);
       room.phrase = pickPhrase();
       room.drawnLetters = [];
@@ -72,14 +97,14 @@ module.exports = (io) => {
       room.guessed = false;
       room.players = {};
       room.subsOnly = !!subsOnly;
-      room.twitchChannel = twitchChannel || null;
+      room.twitchChannel = channel || null;
 
-      if (twitchChannel) {
+      if (channel) {
         const tmi = getClient();
-        if (tmi && !tmi.getChannels().includes(`#${twitchChannel.toLowerCase()}`)) {
-          tmi.join(twitchChannel).catch(() => {});
+        if (tmi && !tmi.getChannels().includes(`#${channel.toLowerCase()}`)) {
+          tmi.join(channel).catch(() => {});
         }
-        setActiveGame(activeStreamer, twitchChannel, room.phrase, room.subsOnly);
+        setActiveGame(activeStreamer, channel, room.phrase, room.subsOnly);
       }
 
       io.to(`ahorcado:${activeStreamer}`).emit("ahorcado:started", { phrase: room.phrase });
