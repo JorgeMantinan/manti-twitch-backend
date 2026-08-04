@@ -1,5 +1,6 @@
 const tmi = require('tmi.js');
 const raffleManager = require('./raffleManager');
+const ahorcadoEngine = require('../utils/ahorcadoEngine');
 
 let client;
 
@@ -14,9 +15,30 @@ const initTmi = (io) => {
     });
 
     client.on("message", (channel, tags, message, self) => {
+        if (self) return;
+
+        const channelName = channel.replace("#", "");
+
+        // Ahorcado: detect someone guessing the active phrase in chat
+        const activeGame = ahorcadoEngine.getActiveGame(channelName);
+
+        if (activeGame && !activeGame.guessed) {
+            if (ahorcadoEngine.normalize(message) === ahorcadoEngine.normalize(activeGame.phrase)) {
+                const guessed = ahorcadoEngine.markGuessed(channelName);
+
+                if (guessed) {
+                    io.to(`ahorcado:${guessed.streamer}`).emit("ahorcado:guessed", {
+                        player: tags["display-name"] || tags.username,
+                    });
+                }
+
+                return;
+            }
+        }
+
         const { state } = raffleManager;
-        if (!state.active || self) return;
-        if (channel.replace("#", "") !== state.twitchChannel) return;
+        if (!state.active) return;
+        if (channelName !== state.twitchChannel) return;
         if (!message.toLowerCase().includes(state.keyword.toLowerCase())) return;
 
         const username = tags.username.toLowerCase();

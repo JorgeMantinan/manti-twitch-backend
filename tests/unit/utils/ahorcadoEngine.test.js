@@ -8,6 +8,11 @@ const {
   lettersOf,
   isComplete,
   isLost,
+  normalize,
+  setActiveGame,
+  getActiveGame,
+  clearActiveGame,
+  markGuessed,
 } = require('../../../src/utils/ahorcadoEngine');
 
 describe('ahorcadoEngine', () => {
@@ -137,6 +142,51 @@ describe('ahorcadoEngine', () => {
       room.phrase = 'A';
       room.misses = MAX_MISSES - 1;
       expect(isLost(room)).toBe(false);
+    });
+  });
+
+  describe('normalize', () => {
+    it('lowercases, trims and collapses spaces', () => {
+      expect(normalize('  Te   la DEDICO  Black ')).toBe('te la dedico black');
+    });
+  });
+
+  describe('active games', () => {
+    it('registers and retrieves an active game by channel', () => {
+      setActiveGame('streamer1', 'mantichannel', 'A una bala');
+      const game = getActiveGame('MANTIchannel');
+      expect(game).not.toBeNull();
+      expect(game.streamer).toBe('streamer1');
+      expect(game.phrase).toBe('A una bala');
+      expect(game.guessed).toBe(false);
+    });
+
+    it('returns null when no active game exists', () => {
+      expect(getActiveGame('somechannel')).toBeNull();
+    });
+
+    it('clears the active game', () => {
+      setActiveGame('streamer2', 'chan2', 'Manti perro');
+      clearActiveGame('chan2');
+      expect(getActiveGame('chan2')).toBeNull();
+    });
+
+    it('markGuessed sets guessed on the game and the room', () => {
+      setActiveGame('streamer3', 'chan3', 'Manti perro');
+      const guessed = markGuessed('chan3');
+      expect(guessed).not.toBeNull();
+      expect(guessed.guessed).toBe(true);
+      expect(getAhorcadoRoom('streamer3').guessed).toBe(true);
+    });
+
+    it('markGuessed returns null on a second guess', () => {
+      setActiveGame('streamer4', 'chan4', 'Manti perro');
+      markGuessed('chan4');
+      expect(markGuessed('chan4')).toBeNull();
+    });
+
+    it('markGuessed returns null when there is no active game', () => {
+      expect(markGuessed('unknown')).toBeNull();
     });
   });
 });

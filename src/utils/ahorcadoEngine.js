@@ -13,6 +13,13 @@ const MAX_MISSES = 6;
 
 const ahorcadoRooms = {};
 
+// Active ahorcado games keyed by twitch channel, used to detect phrase guesses in chat.
+const activeGames = {};
+
+const normalize = (text) => {
+    return String(text || "").toLowerCase().replace(/\s+/g, " ").trim();
+};
+
 const getAhorcadoRoom = (streamer) => {
     if (!ahorcadoRooms[streamer]) {
         ahorcadoRooms[streamer] = {
@@ -20,10 +27,41 @@ const getAhorcadoRoom = (streamer) => {
             drawnLetters: [],
             misses: 0,
             started: false,
+            guessed: false,
+            twitchChannel: null,
             maxMisses: MAX_MISSES,
         };
     }
     return ahorcadoRooms[streamer];
+};
+
+const channelKey = (channel) => normalize(channel).replace(/^#/, "");
+
+const setActiveGame = (streamer, twitchChannel, phrase) => {
+    const key = channelKey(twitchChannel);
+    if (!key) return null;
+    activeGames[key] = { streamer, phrase, guessed: false };
+    return activeGames[key];
+};
+
+const getActiveGame = (twitchChannel) => {
+    return activeGames[channelKey(twitchChannel)] || null;
+};
+
+const clearActiveGame = (twitchChannel) => {
+    const key = channelKey(twitchChannel);
+    if (key) delete activeGames[key];
+};
+
+const markGuessed = (twitchChannel) => {
+    const game = getActiveGame(twitchChannel);
+    if (!game || game.guessed) return null;
+
+    game.guessed = true;
+    const room = getAhorcadoRoom(game.streamer);
+    room.guessed = true;
+
+    return game;
 };
 
 const pickPhrase = (index) => {
@@ -63,4 +101,9 @@ module.exports = {
     lettersOf,
     isComplete,
     isLost,
+    normalize,
+    setActiveGame,
+    getActiveGame,
+    clearActiveGame,
+    markGuessed,
 };

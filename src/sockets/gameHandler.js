@@ -1,5 +1,7 @@
 const { getBingoRoom, drawNumber, checkLine, checkBingo } = require("../utils/bingoEngine");
-const { getAhorcadoRoom, pickPhrase, drawLetter, isComplete, isLost } = require("../utils/ahorcadoEngine");
+const { getAhorcadoRoom, pickPhrase, drawLetter, isComplete, isLost, setActiveGame, clearActiveGame } = require("../utils/ahorcadoEngine");
+const { getClient } = require("../services/tmiClient");
+const raffleManager = require("../services/raffleManager");
 
 module.exports = (io) => {
   io.on("connection", (socket) => {
@@ -60,16 +62,32 @@ module.exports = (io) => {
     });
 
     // Ahorcado game
-    socket.on("ahorcado:start", ({ index }) => {
-      const streamer = socket.data?.ahorcado;
-      if (!streamer) return;
-      const room = getAhorcadoRoom(streamer);
+    socket.on("ahorcado:start", ({ streamer, twitchChannel, index }) => {
+      const activeStreamer = socket.data?.ahorcado;
+      if (!activeStreamer) return;
+      const room = getAhorcadoRoom(activeStreamer);
       room.phrase = pickPhrase(index);
       room.drawnLetters = [];
       room.misses = 0;
       room.started = true;
+      room.guessed = false;
 
-      io.to(`ahorcado:${streamer}`).emit("ahorcado:started", { phrase: room.phrase });
+      // Resolve the twitch channel: explicit, or the one used by the active raffle for this streamer
+      const raffle = raffleManager.state;
+      const channel =
+        twitchChannel || (raffle.selectedStreamer === activeStreamer ? raffle.twitchChannel : null);
+
+      room.twitchChannel = channel;
+
+      if (channel) {
+        const tmi = getClient();
+        if (tmi && !tmi.getChannels().includes(`#${channel.toLowerCase()}`)) {
+          tmi.join(channel).catch(() => {});
+        }
+        setActiveGame(activeStreamer, channel, room.phrase);
+      }
+
+      io.to(`ahorcado:${activeStreamer}`).emit("ahorcado:started", { phrase: room.phrase });
     });
 
     socket.on("ahorcado:draw", () => {
@@ -77,7 +95,7 @@ module.exports = (io) => {
       if (!streamer) return;
       const room = getAhorcadoRoom(streamer);
 
-      if (!room.started) return;
+      if (!room.started || room.guessed) return;
 
       const letter = drawLetter(room);
       if (!letter) return;
@@ -88,8 +106,10 @@ module.exports = (io) => {
       });
 
       if (isComplete(room)) {
+        clearActiveGame(room.twitchChannel);
         io.to(`ahorcado:${streamer}`).emit("ahorcado:win", { phrase: room.phrase });
       } else if (isLost(room)) {
+        clearActiveGame(room.twitchChannel);
         io.to(`ahorcado:${streamer}`).emit("ahorcado:lost", { phrase: room.phrase });
       }
     });
