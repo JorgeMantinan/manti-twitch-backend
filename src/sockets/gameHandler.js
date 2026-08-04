@@ -1,7 +1,6 @@
 const { getBingoRoom, drawNumber, checkLine, checkBingo } = require("../utils/bingoEngine");
 const { getAhorcadoRoom, pickPhrase, drawLetter, isComplete, isLost, setActiveGame, clearActiveGame } = require("../utils/ahorcadoEngine");
 const { getClient } = require("../services/tmiClient");
-const raffleManager = require("../services/raffleManager");
 
 module.exports = (io) => {
   io.on("connection", (socket) => {
@@ -62,29 +61,25 @@ module.exports = (io) => {
     });
 
     // Ahorcado game
-    socket.on("ahorcado:start", ({ streamer, twitchChannel, index }) => {
+    socket.on("ahorcado:start", ({ streamer, twitchChannel, subsOnly }) => {
       const activeStreamer = socket.data?.ahorcado;
       if (!activeStreamer) return;
       const room = getAhorcadoRoom(activeStreamer);
-      room.phrase = pickPhrase(index);
+      room.phrase = pickPhrase();
       room.drawnLetters = [];
       room.misses = 0;
       room.started = true;
       room.guessed = false;
+      room.players = {};
+      room.subsOnly = !!subsOnly;
+      room.twitchChannel = twitchChannel || null;
 
-      // Resolve the twitch channel: explicit, or the one used by the active raffle for this streamer
-      const raffle = raffleManager.state;
-      const channel =
-        twitchChannel || (raffle.selectedStreamer === activeStreamer ? raffle.twitchChannel : null);
-
-      room.twitchChannel = channel;
-
-      if (channel) {
+      if (twitchChannel) {
         const tmi = getClient();
-        if (tmi && !tmi.getChannels().includes(`#${channel.toLowerCase()}`)) {
-          tmi.join(channel).catch(() => {});
+        if (tmi && !tmi.getChannels().includes(`#${twitchChannel.toLowerCase()}`)) {
+          tmi.join(twitchChannel).catch(() => {});
         }
-        setActiveGame(activeStreamer, channel, room.phrase);
+        setActiveGame(activeStreamer, twitchChannel, room.phrase, room.subsOnly);
       }
 
       io.to(`ahorcado:${activeStreamer}`).emit("ahorcado:started", { phrase: room.phrase });

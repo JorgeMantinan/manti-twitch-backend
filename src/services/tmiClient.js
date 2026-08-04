@@ -19,21 +19,29 @@ const initTmi = (io) => {
 
         const channelName = channel.replace("#", "");
 
-        // Ahorcado: detect someone guessing the active phrase in chat
-        const activeGame = ahorcadoEngine.getActiveGame(channelName);
+        // Ahorcado: "!ahorcado <frase>" guesses in chat, validated in real-time (sub check happens here)
+        if (ahorcadoEngine.normalize(message).startsWith("!ahorcado")) {
+            const guess = ahorcadoEngine.parseGuess(message);
+            if (guess) {
+                const result = ahorcadoEngine.processChatGuess(
+                    channelName,
+                    tags.username,
+                    tags["display-name"] || tags.username,
+                    guess,
+                    tags
+                );
 
-        if (activeGame && !activeGame.guessed) {
-            if (ahorcadoEngine.normalize(message) === ahorcadoEngine.normalize(activeGame.phrase)) {
-                const guessed = ahorcadoEngine.markGuessed(channelName);
-
-                if (guessed) {
-                    io.to(`ahorcado:${guessed.streamer}`).emit("ahorcado:guessed", {
-                        player: tags["display-name"] || tags.username,
+                if (result?.kind === "miss") {
+                    io.to(`ahorcado:${result.streamer}`).emit("ahorcado:playerMiss", {
+                        player: result.player,
+                    });
+                } else if (result?.kind === "win") {
+                    io.to(`ahorcado:${result.streamer}`).emit("ahorcado:guessed", {
+                        player: result.player.name,
                     });
                 }
-
-                return;
             }
+            return;
         }
 
         const { state } = raffleManager;

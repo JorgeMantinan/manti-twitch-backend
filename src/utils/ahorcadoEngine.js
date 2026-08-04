@@ -10,6 +10,8 @@ const PHRASES = [
 ];
 
 const MAX_MISSES = 6;
+const MAX_PLAYER_MISSES = 6;
+const GUESS_PREFIX = "!ahorcado ";
 
 const ahorcadoRooms = {};
 
@@ -30,6 +32,8 @@ const getAhorcadoRoom = (streamer) => {
             guessed: false,
             twitchChannel: null,
             maxMisses: MAX_MISSES,
+            players: {},
+            subsOnly: false,
         };
     }
     return ahorcadoRooms[streamer];
@@ -37,10 +41,10 @@ const getAhorcadoRoom = (streamer) => {
 
 const channelKey = (channel) => normalize(channel).replace(/^#/, "");
 
-const setActiveGame = (streamer, twitchChannel, phrase) => {
+const setActiveGame = (streamer, twitchChannel, phrase, subsOnly = false) => {
     const key = channelKey(twitchChannel);
     if (!key) return null;
-    activeGames[key] = { streamer, phrase, guessed: false };
+    activeGames[key] = { streamer, phrase, guessed: false, subsOnly };
     return activeGames[key];
 };
 
@@ -91,10 +95,68 @@ const isLost = (room) => {
     return room.misses >= room.maxMisses;
 };
 
+const parseGuess = (message) => {
+    const norm = normalize(message);
+    if (!norm.startsWith(GUESS_PREFIX)) return null;
+    const guess = norm.slice(GUESS_PREFIX.length).trim();
+    return guess || null;
+};
+
+const isSubscriber = (tags) => {
+    if (!tags) return false;
+    if (String(tags.subscriber) === "1") return true;
+    const badges = String(tags.badges || "");
+    return /(subscriber|founder)\//.test(badges);
+};
+
+const registerPlayer = (room, username, displayName) => {
+    const key = String(username || "").toLowerCase();
+    if (!key) return null;
+    if (!room.players[key]) {
+        room.players[key] = { username: displayName || username, misses: 0 };
+    }
+    return room.players[key];
+};
+
+const addPlayerMiss = (room, username, displayName) => {
+    const player = registerPlayer(room, username, displayName);
+    if (!player) return null;
+    player.misses += 1;
+    return player;
+};
+
+const playerEliminated = (room, username) => {
+    const key = String(username || "").toLowerCase();
+    const player = room.players[key];
+    return !!player && player.misses >= MAX_PLAYER_MISSES;
+};
+
+const processChatGuess = (channel, username, displayName, guess, tags) => {
+    const game = getActiveGame(channel);
+    if (!game || game.guessed) return null;
+
+    if (game.subsOnly && !isSubscriber(tags)) return null;
+
+    const room = getAhorcadoRoom(game.streamer);
+    if (playerEliminated(room, username)) return null;
+
+    if (normalize(guess) !== normalize(game.phrase)) {
+        const player = addPlayerMiss(room, username, displayName);
+        if (!player) return null;
+        return { kind: "miss", streamer: game.streamer, player: { name: player.username, misses: player.misses } };
+    }
+
+    const player = registerPlayer(room, username, displayName);
+    markGuessed(channel);
+    return { kind: "win", streamer: game.streamer, player: { name: player.username } };
+};
+
 module.exports = {
     ALPHABET,
     PHRASES,
     MAX_MISSES,
+    MAX_PLAYER_MISSES,
+    GUESS_PREFIX,
     getAhorcadoRoom,
     pickPhrase,
     drawLetter,
@@ -106,4 +168,10 @@ module.exports = {
     getActiveGame,
     clearActiveGame,
     markGuessed,
+    parseGuess,
+    isSubscriber,
+    registerPlayer,
+    addPlayerMiss,
+    playerEliminated,
+    processChatGuess,
 };

@@ -2,6 +2,8 @@ const {
   ALPHABET,
   PHRASES,
   MAX_MISSES,
+  MAX_PLAYER_MISSES,
+  GUESS_PREFIX,
   getAhorcadoRoom,
   pickPhrase,
   drawLetter,
@@ -13,6 +15,12 @@ const {
   getActiveGame,
   clearActiveGame,
   markGuessed,
+  parseGuess,
+  isSubscriber,
+  registerPlayer,
+  addPlayerMiss,
+  playerEliminated,
+  processChatGuess,
 } = require('../../../src/utils/ahorcadoEngine');
 
 describe('ahorcadoEngine', () => {
@@ -187,6 +195,113 @@ describe('ahorcadoEngine', () => {
 
     it('markGuessed returns null when there is no active game', () => {
       expect(markGuessed('unknown')).toBeNull();
+    });
+  });
+
+  describe('parseGuess', () => {
+    it('extracts the phrase after the command prefix', () => {
+      expect(parseGuess('!ahorcado Manti perro')).toBe('manti perro');
+    });
+
+    it('returns null for a message without the command', () => {
+      expect(parseGuess('Manti perro')).toBeNull();
+    });
+
+    it('returns null for an empty command', () => {
+      expect(parseGuess('!ahorcado')).toBeNull();
+      expect(parseGuess('!ahorcado   ')).toBeNull();
+    });
+  });
+
+  describe('isSubscriber', () => {
+    it('returns true when subscriber tag is 1', () => {
+      expect(isSubscriber({ subscriber: '1' })).toBe(true);
+    });
+
+    it('returns true when badges include subscriber or founder', () => {
+      expect(isSubscriber({ badges: 'subscriber/12' })).toBe(true);
+      expect(isSubscriber({ badges: 'founder/0' })).toBe(true);
+    });
+
+    it('returns false for non-subs', () => {
+      expect(isSubscriber({ badges: 'vip/1' })).toBe(false);
+      expect(isSubscriber({})).toBe(false);
+      expect(isSubscriber(null)).toBe(false);
+    });
+  });
+
+  describe('per-player misses', () => {
+    it('registers a player and accumulates misses per player', () => {
+      const room = getAhorcadoRoom('playertest1');
+      room.players = {};
+      addPlayerMiss(room, 'alice', 'Alice');
+      addPlayerMiss(room, 'alice', 'Alice');
+      addPlayerMiss(room, 'bob', 'Bob');
+      expect(room.players['alice'].misses).toBe(2);
+      expect(room.players['bob'].misses).toBe(1);
+      expect(room.players['alice'].username).toBe('Alice');
+    });
+
+    it('playerEliminated after MAX_PLAYER_MISSES', () => {
+      const room = getAhorcadoRoom('playertest2');
+      room.players = {};
+      for (let i = 0; i < MAX_PLAYER_MISSES; i++) addPlayerMiss(room, 'alice', 'Alice');
+      expect(playerEliminated(room, 'alice')).toBe(true);
+    });
+
+    it('registerPlayer keeps existing player state', () => {
+      const room = getAhorcadoRoom('playertest3');
+      room.players = {};
+      registerPlayer(room, 'alice', 'Alice');
+      const again = registerPlayer(room, 'alice', 'Alice');
+      expect(again.misses).toBe(0);
+      expect(Object.keys(room.players)).toHaveLength(1);
+    });
+  });
+
+  describe('processChatGuess', () => {
+    beforeEach(() => {
+      setActiveGame('guessstreamer', 'guesschan', 'Manti perro');
+    });
+
+    it('adds a miss for a wrong guess', () => {
+      const res = processChatGuess('guesschan', 'alice', 'Alice', 'Manti gato', {});
+      expect(res.kind).toBe('miss');
+      expect(res.player.name).toBe('Alice');
+      expect(res.player.misses).toBe(1);
+    });
+
+    it('registers a win for the exact phrase', () => {
+      const res = processChatGuess('guesschan', 'alice', 'Alice', 'Manti perro', {});
+      expect(res.kind).toBe('win');
+      expect(res.player.name).toBe('Alice');
+      expect(getAhorcadoRoom('guessstreamer').guessed).toBe(true);
+    });
+
+    it('returns null once the game has been guessed', () => {
+      processChatGuess('guesschan', 'alice', 'Alice', 'Manti perro', {});
+      expect(processChatGuess('guesschan', 'bob', 'Bob', 'Manti perro', {})).toBeNull();
+    });
+
+    it('ignores non-subs when the game is subs-only', () => {
+      setActiveGame('guessstreamer2', 'guesschan2', 'Manti perro', true);
+      expect(processChatGuess('guesschan2', 'alice', 'Alice', 'Manti perro', { badges: 'vip/1' })).toBeNull();
+    });
+
+    it('accepts subs when the game is subs-only', () => {
+      setActiveGame('guessstreamer3', 'guesschan3', 'Manti perro', true);
+      const res = processChatGuess('guesschan3', 'alice', 'Alice', 'Manti perro', { subscriber: '1' });
+      expect(res.kind).toBe('win');
+    });
+
+    it('ignores players who reached the miss limit', () => {
+      const room = getAhorcadoRoom('guessstreamer');
+      room.players['alice'] = { username: 'Alice', misses: MAX_PLAYER_MISSES };
+      expect(processChatGuess('guesschan', 'alice', 'Alice', 'Manti perro', {})).toBeNull();
+    });
+
+    it('returns null when there is no active game', () => {
+      expect(processChatGuess('nope', 'alice', 'Alice', 'Manti perro', {})).toBeNull();
     });
   });
 });
