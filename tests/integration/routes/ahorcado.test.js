@@ -21,4 +21,9 @@ describe('Ahorcado routes', () => {
     expect(Array.isArray(res.body.phrases)).toBe(true);
     expect(res.body.phrases).toContain('A una bala');
   });
+
+  it('GET /api/ahorcado/channel returns 401 without token', async () => {
+    const res = await request(app).get('/api/ahorcado/channel');
+    expect(res.status).toBe(401);
+  });
 });

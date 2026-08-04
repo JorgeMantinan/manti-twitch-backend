@@ -1,5 +1,5 @@
 const { getBingoRoom, drawNumber, checkLine, checkBingo } = require("../utils/bingoEngine");
-const { getAhorcadoRoom, pickPhrase, drawLetter, isComplete, isLost, setActiveGame, clearActiveGame } = require("../utils/ahorcadoEngine");
+const { getAhorcadoRoom, pickPhrase, drawLetter, isComplete, setActiveGame, clearActiveGame } = require("../utils/ahorcadoEngine");
 const { getClient } = require("../services/tmiClient");
 
 module.exports = (io) => {
@@ -103,9 +103,6 @@ module.exports = (io) => {
       if (isComplete(room)) {
         clearActiveGame(room.twitchChannel);
         io.to(`ahorcado:${streamer}`).emit("ahorcado:win", { phrase: room.phrase });
-      } else if (isLost(room)) {
-        clearActiveGame(room.twitchChannel);
-        io.to(`ahorcado:${streamer}`).emit("ahorcado:lost", { phrase: room.phrase });
       }
     });
   });
