@@ -15,6 +15,7 @@ function createApp(io) {
   app.use("/auth", require("./routes/auth"));
   app.use("/api/twitch", require("./routes/twitch"));
   app.use("/api/raffle", require("./routes/raffle"));
+  app.use("/api/ahorcado", require("./routes/ahorcado"));
 
   app.get("/", (req, res) => res.send("🚀🚀🚀🚀🚀"));
 

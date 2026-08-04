@@ -1,4 +1,5 @@
 const { getBingoRoom, drawNumber, checkLine, checkBingo } = require("../utils/bingoEngine");
+const { getAhorcadoRoom, pickPhrase, drawLetter, isComplete, isLost } = require("../utils/ahorcadoEngine");
 
 module.exports = (io) => {
   io.on("connection", (socket) => {
@@ -10,6 +11,7 @@ module.exports = (io) => {
       socket.data[game] = streamer;
       
       if (game === "bingo") getBingoRoom(streamer);
+      if (game === "ahorcado") getAhorcadoRoom(streamer);
     });
 
     // Bingo game
@@ -55,6 +57,41 @@ module.exports = (io) => {
     socket.on("ships:action", (data) => {
         const streamer = socket.data?.ships;
         if (streamer) io.to(`ships:${streamer}`).emit("ships:update", data);
+    });
+
+    // Ahorcado game
+    socket.on("ahorcado:start", ({ index }) => {
+      const streamer = socket.data?.ahorcado;
+      if (!streamer) return;
+      const room = getAhorcadoRoom(streamer);
+      room.phrase = pickPhrase(index);
+      room.drawnLetters = [];
+      room.misses = 0;
+      room.started = true;
+
+      io.to(`ahorcado:${streamer}`).emit("ahorcado:started", { phrase: room.phrase });
+    });
+
+    socket.on("ahorcado:draw", () => {
+      const streamer = socket.data?.ahorcado;
+      if (!streamer) return;
+      const room = getAhorcadoRoom(streamer);
+
+      if (!room.started) return;
+
+      const letter = drawLetter(room);
+      if (!letter) return;
+
+      io.to(`ahorcado:${streamer}`).emit("ahorcado:letter", {
+        letter,
+        misses: room.misses,
+      });
+
+      if (isComplete(room)) {
+        io.to(`ahorcado:${streamer}`).emit("ahorcado:win", { phrase: room.phrase });
+      } else if (isLost(room)) {
+        io.to(`ahorcado:${streamer}`).emit("ahorcado:lost", { phrase: room.phrase });
+      }
     });
   });
 };
