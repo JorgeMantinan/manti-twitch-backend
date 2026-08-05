@@ -6,6 +6,7 @@ const { getStreamerLogin, refreshTokens } = require("../services/twitchAPI");
 
 const resolveChannelFromToken = async (token) => {
   const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  if (decoded.login) return decoded.login;
   try {
     return await getStreamerLogin(decoded.twitchToken);
   } catch (err) {

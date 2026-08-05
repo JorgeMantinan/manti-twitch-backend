@@ -29,6 +29,7 @@ router.get("/twitch/callback", async (req, res) => {
             twitchToken: tokenRes.data.access_token,
             refreshToken: tokenRes.data.refresh_token,
             twitchId: userRes.data.data[0].id,
+            login: userRes.data.data[0].login,
             scopes: tokenRes.data.scope
         }, process.env.JWT_SECRET, { expiresIn: "1d" });
 
