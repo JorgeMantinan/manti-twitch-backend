@@ -32,6 +32,10 @@ describe('ahorcadoEngine', () => {
       expect(PHRASES).toContain('Ema te la dedico');
       expect(PHRASES).toContain('Manti perro');
       expect(PHRASES).toContain('Vamos cogerme los pezones y estirarlos');
+      expect(PHRASES).toContain('Soy humilde solo gano');
+      expect(PHRASES).toContain('Esta es pulpo o calamar?');
+      expect(PHRASES).toContain('Lady, hoy para comer fideua?');
+      expect(PHRASES).toContain('No se que le habrás hecho a Ema para que te quiera tanto Manti');
     });
   });
 
