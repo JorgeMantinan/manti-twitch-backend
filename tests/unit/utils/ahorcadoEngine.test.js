@@ -36,6 +36,10 @@ describe('ahorcadoEngine', () => {
       expect(PHRASES).toContain('Esta es pulpo o calamar');
       expect(PHRASES).toContain('Lady, hoy para comer fideua');
       expect(PHRASES).toContain('No se que le habrás hecho a Ema para que te quiera tanto Manti');
+      expect(PHRASES).toContain('Mirame la cobra');
+      expect(PHRASES).toContain('Te gusta bien duro a a, yo soy la de tu autoescuela esa la de tu esquela a que no te fijabas en mi a a ahora ya te fijas a y ahora yo te digo tra tra');
+      expect(PHRASES).toContain('Panceta panceta panceta panceta');
+      expect(PHRASES).toContain('Robo total de verdad que verguenza');
     });
   });
 
