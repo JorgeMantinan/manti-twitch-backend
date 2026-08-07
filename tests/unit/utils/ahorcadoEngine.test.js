@@ -275,6 +275,7 @@ describe('ahorcadoEngine', () => {
     it('adds a miss for a wrong guess', () => {
       const res = processChatGuess('guesschan', 'alice', 'Alice', 'Manti gato', {});
       expect(res.kind).toBe('miss');
+      expect(res.channel).toBe('guesschan');
       expect(res.player.name).toBe('Alice');
       expect(res.player.misses).toBe(1);
     });
@@ -282,6 +283,7 @@ describe('ahorcadoEngine', () => {
     it('registers a win for the exact phrase', () => {
       const res = processChatGuess('guesschan', 'alice', 'Alice', 'Manti perro', {});
       expect(res.kind).toBe('win');
+      expect(res.channel).toBe('guesschan');
       expect(res.player.name).toBe('Alice');
       expect(res.phrase).toBe('Manti perro');
       expect(getAhorcadoRoom('guessstreamer').guessed).toBe(true);

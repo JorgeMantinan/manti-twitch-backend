@@ -1,6 +1,6 @@
 const jwt = require("jsonwebtoken");
 const { getBingoRoom, drawNumber, checkLine, checkBingo } = require("../utils/bingoEngine");
-const { getAhorcadoRoom, pickPhrase, drawLetter, isComplete, setActiveGame, clearActiveGame } = require("../utils/ahorcadoEngine");
+const { getAhorcadoRoom, pickPhrase, drawLetter, isComplete, setActiveGame, clearActiveGame, channelKey } = require("../utils/ahorcadoEngine");
 const { getClient } = require("../services/tmiClient");
 const { getStreamerLogin, refreshTokens } = require("../services/twitchAPI");
 
@@ -101,6 +101,8 @@ module.exports = (io) => {
       room.twitchChannel = channel || null;
 
       if (channel) {
+        socket.join(`ahorcadochan:${channelKey(channel)}`);
+
         const tmi = getClient();
         if (tmi && !tmi.getChannels().includes(`#${channel.toLowerCase()}`)) {
           tmi.join(channel).catch(() => {});
@@ -108,7 +110,10 @@ module.exports = (io) => {
         setActiveGame(activeStreamer, channel, room.phrase, room.subsOnly);
       }
 
-      io.to(`ahorcado:${activeStreamer}`).emit("ahorcado:started", { phrase: room.phrase });
+      const target = room.twitchChannel
+        ? `ahorcadochan:${channelKey(room.twitchChannel)}`
+        : `ahorcado:${activeStreamer}`;
+      io.to(target).emit("ahorcado:started", { phrase: room.phrase });
     });
 
     socket.on("ahorcado:draw", () => {
@@ -121,14 +126,18 @@ module.exports = (io) => {
       const letter = drawLetter(room);
       if (!letter) return;
 
-      io.to(`ahorcado:${streamer}`).emit("ahorcado:letter", {
+      const target = room.twitchChannel
+        ? `ahorcadochan:${channelKey(room.twitchChannel)}`
+        : `ahorcado:${streamer}`;
+
+      io.to(target).emit("ahorcado:letter", {
         letter,
         misses: room.misses,
       });
 
       if (isComplete(room)) {
         clearActiveGame(room.twitchChannel);
-        io.to(`ahorcado:${streamer}`).emit("ahorcado:win", { phrase: room.phrase });
+        io.to(target).emit("ahorcado:win", { phrase: room.phrase });
       }
     });
   });

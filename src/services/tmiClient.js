@@ -32,11 +32,11 @@ const initTmi = (io) => {
                 );
 
                 if (result?.kind === "miss") {
-                    io.to(`ahorcado:${result.streamer}`).emit("ahorcado:playerMiss", {
+                    io.to(`ahorcadochan:${result.channel}`).emit("ahorcado:playerMiss", {
                         player: result.player,
                     });
                 } else if (result?.kind === "win") {
-                    io.to(`ahorcado:${result.streamer}`).emit("ahorcado:guessed", {
+                    io.to(`ahorcadochan:${result.channel}`).emit("ahorcado:guessed", {
                         player: result.player.name,
                         phrase: result.phrase,
                     });
