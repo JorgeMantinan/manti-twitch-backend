@@ -5,7 +5,7 @@ const { getClient } = require("../services/tmiClient");
 const { getStreamerLogin, refreshTokens } = require("../services/twitchAPI");
 
 const resolveChannelFromToken = async (token) => {
-  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
   if (decoded.login) return decoded.login;
   try {
     return await getStreamerLogin(decoded.twitchToken);
@@ -18,23 +18,35 @@ const resolveChannelFromToken = async (token) => {
   }
 };
 
+const ALLOWED_GAMES = ["roulette", "bingo", "ships", "ahorcado"];
+const STREAMER_RE = /^[a-zA-Z0-9_-]{1,64}$/;
+const CHANNEL_RE = /^[a-zA-Z0-9_]{1,25}$/;
+
 module.exports = (io) => {
   io.on("connection", (socket) => {
-    
-    socket.on("joinRoom", ({ game, streamer }) => {
+
+    socket.on("joinRoom", (payload) => {
+      const { game, streamer } = payload || {};
+      if (!ALLOWED_GAMES.includes(game)) return;
+      if (typeof streamer !== "string" || !STREAMER_RE.test(streamer)) return;
+      if (game === "ahorcado" && !socket.data.user) return;
+
       const room = `${game}:${streamer}`;
       socket.join(room);
       socket.data = socket.data || {};
       socket.data[game] = streamer;
-      
+
       if (game === "bingo") getBingoRoom(streamer);
       if (game === "ahorcado") getAhorcadoRoom(streamer);
     });
 
     // Bingo game
-    socket.on("bingo:start", ({ cards }) => {
+    socket.on("bingo:start", (payload) => {
+      if (!socket.data.user) return;
+      const { cards } = payload || {};
       const streamer = socket.data?.bingo;
       if (!streamer) return;
+      if (!cards || typeof cards !== "object") return;
       const room = getBingoRoom(streamer);
       room.cards = cards;
       room.drawn = [];
@@ -44,6 +56,7 @@ module.exports = (io) => {
     });
 
     socket.on("bingo:draw", () => {
+      if (!socket.data.user) return;
       const streamer = socket.data?.bingo;
       if (!streamer) return;
       const room = getBingoRoom(streamer);
@@ -72,16 +85,23 @@ module.exports = (io) => {
 
     // Ships game
     socket.on("ships:action", (data) => {
+        if (!socket.data.user) return;
         const streamer = socket.data?.ships;
-        if (streamer) io.to(`ships:${streamer}`).emit("ships:update", data);
+        if (streamer && data && typeof data === "object") {
+          io.to(`ships:${streamer}`).emit("ships:update", data);
+        }
     });
 
     // Ahorcado game
-    socket.on("ahorcado:start", async ({ streamer, twitchChannel, subsOnly, token }) => {
+    socket.on("ahorcado:start", async (payload) => {
+      if (!socket.data.user) return;
+      const { twitchChannel, subsOnly, token } = payload || {};
       const activeStreamer = socket.data?.ahorcado;
       if (!activeStreamer) return;
 
-      let channel = twitchChannel;
+      let channel = typeof twitchChannel === "string" && CHANNEL_RE.test(twitchChannel)
+        ? twitchChannel
+        : null;
       if (!channel && token) {
         try {
           channel = await resolveChannelFromToken(token);
@@ -117,6 +137,7 @@ module.exports = (io) => {
     });
 
     socket.on("ahorcado:draw", () => {
+      if (!socket.data.user) return;
       const streamer = socket.data?.ahorcado;
       if (!streamer) return;
       const room = getAhorcadoRoom(streamer);

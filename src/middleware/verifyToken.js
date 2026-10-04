@@ -6,12 +6,13 @@ module.exports = (req, res, next) => {
 
   try {
     const token = authHeader.split(" ")[1];
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: ["HS256"] });
 
     req.user = {
       accessToken: decoded.twitchToken,
       refreshToken: decoded.refreshToken,
       twitchId: decoded.twitchId,
+      login: decoded.login,
       scopes: decoded.scopes,
     };
     next();
