@@ -11,7 +11,6 @@ module.exports = {
   },
   corsOrigins: [
     "https://manti-twitch.vercel.app",
-    "https://jorgemantinan.github.io",
   ],
   frontendUrl: process.env.FRONTEND_URL || "https://manti-twitch.vercel.app",
 };
