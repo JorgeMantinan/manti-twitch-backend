@@ -33,7 +33,7 @@ router.get("/twitch/callback", async (req, res) => {
             scopes: tokenRes.data.scope
         }, process.env.JWT_SECRET, { expiresIn: "1d" });
 
-        res.redirect(`https://jorgemantinan.github.io/manti-twitch/?token=${userToken}`);
+        res.redirect(`${require("../config/index").frontendUrl}/?token=${userToken}`);
     } catch (e) {
         res.status(500).send("Auth failed");
     }

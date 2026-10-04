@@ -10,8 +10,8 @@ module.exports = {
     redirectUri: process.env.TWITCH_REDIRECT_URI.trim(),
   },
   corsOrigins: [
+    "https://manti-twitch.vercel.app",
     "https://jorgemantinan.github.io",
-    "https://jorgemantinan.github.io/manti-twitch",
-    "https://jorgemantinan.github.io/manti-twitch/",
-  ]
+  ],
+  frontendUrl: process.env.FRONTEND_URL || "https://manti-twitch.vercel.app",
 };
