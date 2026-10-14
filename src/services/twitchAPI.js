@@ -69,6 +69,8 @@ async function getAvatars(logins) {
   }
   if (!valid.length) return {};
 
+  if (avatarCache.size > 5000) avatarCache.clear();
+
   const now = Date.now();
   const missing = valid.filter((login) => {
     const cached = avatarCache.get(login);
@@ -83,15 +85,20 @@ async function getAvatars(logins) {
         "Client-Id": process.env.TWITCH_CLIENT_ID,
       },
     });
+    const got = new Set(res.data.data.map((u) => u.login.toLowerCase()));
     for (const user of res.data.data) {
       avatarCache.set(user.login.toLowerCase(), { url: user.profile_image_url, at: Date.now() });
+    }
+    // Negative cache: unknown logins count as fresh misses for the TTL
+    for (const login of missing) {
+      if (!got.has(login)) avatarCache.set(login, { url: null, at: Date.now() });
     }
   }
 
   const result = {};
   for (const login of valid) {
     const cached = avatarCache.get(login);
-    if (cached) result[login] = cached.url;
+    if (cached && cached.url) result[login] = cached.url;
   }
   return result;
 }

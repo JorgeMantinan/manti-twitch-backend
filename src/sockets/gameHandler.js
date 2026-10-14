@@ -23,6 +23,7 @@ const STREAMER_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 const CHANNEL_RE = /^[a-zA-Z0-9_]{1,25}$/;
 
 const announceTimes = new Map();
+const announceLastByLogin = new Map();
 
 module.exports = (io) => {
   io.on("connection", (socket) => {
@@ -100,27 +101,42 @@ module.exports = (io) => {
       const { winner, channel } = payload || {};
       if (typeof winner !== "string" || !CHANNEL_RE.test(winner)) return;
 
+      const own =
+        typeof socket.data.user.login === "string"
+          ? socket.data.user.login.toLowerCase()
+          : null;
+
       let target = typeof channel === "string" && CHANNEL_RE.test(channel)
         ? channel.toLowerCase()
         : null;
-      if (!target) {
-        const login = socket.data.user.login;
-        if (typeof login !== "string" || !CHANNEL_RE.test(login)) return;
-        target = login.toLowerCase();
-      }
+      if (!target) target = own;
+      if (!target) return;
+
+      // Only the caller's own channel, or a channel the bot already joined
+      const bot = getClient();
+      const alreadyJoined =
+        !!bot &&
+        Array.isArray(bot.getChannels()) &&
+        bot.getChannels().includes(`#${target}`);
+      if (target !== own && !alreadyJoined) return;
 
       const now = Date.now();
-      if (socket.data.lastAnnounceAt && now - socket.data.lastAnnounceAt < 3000) return;
+      const lastByLogin = announceLastByLogin.get(own || "");
+      if (lastByLogin && now - lastByLogin < 3000) return;
 
       if (announceTimes.size > 500) {
         for (const [ch, at] of announceTimes) {
           if (now - at > 60000) announceTimes.delete(ch);
         }
       }
+      if (announceTimes.size > 1000) return;
+
       const lastChannelAt = announceTimes.get(target);
       if (lastChannelAt && now - lastChannelAt < 10000) return;
 
-      socket.data.lastAnnounceAt = now;
+      announceLastByLogin.set(own || "", now);
+      if (announceLastByLogin.size > 1000) announceLastByLogin.clear();
+
       announceTimes.set(target, now);
 
       sayInChannel(target, `🏆 ¡@${winner} ha ganado el sorteo!`).catch(() => {});
