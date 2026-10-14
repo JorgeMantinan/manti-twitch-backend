@@ -1,7 +1,7 @@
 const jwt = require("jsonwebtoken");
 const { getBingoRoom, drawNumber, checkLine, checkBingo } = require("../utils/bingoEngine");
 const { getAhorcadoRoom, pickPhrase, drawLetter, isComplete, setActiveGame, clearActiveGame, channelKey } = require("../utils/ahorcadoEngine");
-const { getClient } = require("../services/tmiClient");
+const { getClient, sayInChannel } = require("../services/tmiClient");
 const { getStreamerLogin, refreshTokens } = require("../services/twitchAPI");
 
 const resolveChannelFromToken = async (token) => {
@@ -21,6 +21,8 @@ const resolveChannelFromToken = async (token) => {
 const ALLOWED_GAMES = ["roulette", "bingo", "ships", "ahorcado"];
 const STREAMER_RE = /^[a-zA-Z0-9_-]{1,64}$/;
 const CHANNEL_RE = /^[a-zA-Z0-9_]{1,25}$/;
+
+const announceTimes = new Map();
 
 module.exports = (io) => {
   io.on("connection", (socket) => {
@@ -90,6 +92,38 @@ module.exports = (io) => {
         if (streamer && data && typeof data === "object") {
           io.to(`ships:${streamer}`).emit("ships:update", data);
         }
+    });
+
+    // Roulette announce
+    socket.on("roulette:announce", (payload) => {
+      if (!socket.data.user) return;
+      const { winner, channel } = payload || {};
+      if (typeof winner !== "string" || !CHANNEL_RE.test(winner)) return;
+
+      let target = typeof channel === "string" && CHANNEL_RE.test(channel)
+        ? channel.toLowerCase()
+        : null;
+      if (!target) {
+        const login = socket.data.user.login;
+        if (typeof login !== "string" || !CHANNEL_RE.test(login)) return;
+        target = login.toLowerCase();
+      }
+
+      const now = Date.now();
+      if (socket.data.lastAnnounceAt && now - socket.data.lastAnnounceAt < 3000) return;
+
+      if (announceTimes.size > 500) {
+        for (const [ch, at] of announceTimes) {
+          if (now - at > 60000) announceTimes.delete(ch);
+        }
+      }
+      const lastChannelAt = announceTimes.get(target);
+      if (lastChannelAt && now - lastChannelAt < 10000) return;
+
+      socket.data.lastAnnounceAt = now;
+      announceTimes.set(target, now);
+
+      sayInChannel(target, `🏆 ¡@${winner} ha ganado el sorteo!`).catch(() => {});
     });
 
     // Ahorcado game

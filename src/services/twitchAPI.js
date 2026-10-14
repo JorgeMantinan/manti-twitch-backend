@@ -52,4 +52,48 @@ async function getStreamerLogin(token) {
     return res.data.data[0].login;
 }
 
-module.exports = { fetchAll, refreshTokens, twitchAPI, getStreamerLogin };
+const AVATAR_TTL = 10 * 60 * 1000;
+const LOGIN_RE = /^[a-zA-Z0-9_]{1,25}$/;
+const avatarCache = new Map();
+
+async function getAvatars(logins) {
+  const valid = [];
+  const seen = new Set();
+  for (const raw of Array.isArray(logins) ? logins : []) {
+    if (typeof raw !== "string" || !LOGIN_RE.test(raw)) continue;
+    const login = raw.toLowerCase();
+    if (seen.has(login)) continue;
+    seen.add(login);
+    valid.push(login);
+    if (valid.length >= 100) break;
+  }
+  if (!valid.length) return {};
+
+  const now = Date.now();
+  const missing = valid.filter((login) => {
+    const cached = avatarCache.get(login);
+    return !cached || now - cached.at >= AVATAR_TTL;
+  });
+
+  if (missing.length) {
+    const res = await axios.get("https://api.twitch.tv/helix/users", {
+      params: { login: missing },
+      headers: {
+        Authorization: `Bearer ${process.env.TWITCH_ACCESS_TOKEN}`,
+        "Client-Id": process.env.TWITCH_CLIENT_ID,
+      },
+    });
+    for (const user of res.data.data) {
+      avatarCache.set(user.login.toLowerCase(), { url: user.profile_image_url, at: Date.now() });
+    }
+  }
+
+  const result = {};
+  for (const login of valid) {
+    const cached = avatarCache.get(login);
+    if (cached) result[login] = cached.url;
+  }
+  return result;
+}
+
+module.exports = { fetchAll, refreshTokens, twitchAPI, getStreamerLogin, getAvatars };

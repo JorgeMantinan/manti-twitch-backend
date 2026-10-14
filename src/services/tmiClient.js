@@ -69,4 +69,20 @@ const initTmi = (io) => {
     return client;
 };
 
-module.exports = { initTmi, getClient: () => client };
+const sayInChannel = async (channel, message) => {
+    if (!client || typeof channel !== "string" || !channel) return false;
+    const ch = channel.toLowerCase().replace(/^#/, "");
+    if (!/^[a-zA-Z0-9_]{1,25}$/.test(ch)) return false;
+    try {
+        if (!client.getChannels().includes(`#${ch}`)) {
+            await client.join(ch);
+        }
+        await client.say(ch, message);
+        return true;
+    } catch (err) {
+        console.error("tmi sayInChannel failed:", err && err.message);
+        return false;
+    }
+};
+
+module.exports = { initTmi, sayInChannel, getClient: () => client };

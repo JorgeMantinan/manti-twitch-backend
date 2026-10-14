@@ -1,4 +1,5 @@
-const { fetchAll, twitchAPI, refreshTokens } = require("../services/twitchAPI");
+const twitchAPIService = require("../services/twitchAPI");
+const { fetchAll, twitchAPI, refreshTokens } = twitchAPIService;
 const config = require("../config/index");
 
 let subsCache = { data: null, timestamp: 0 };
@@ -81,6 +82,22 @@ exports.getChatters = async (req, res) => {
     res.json({ chatters: response.data.data.map(u => u.user_login) });
   } catch (e) {
     res.status(500).json({ error: "No se pudo obtener la lista de chatters" });
+  }
+};
+
+exports.getAvatars = async (req, res) => {
+  const { logins } = req.query;
+  if (typeof logins !== "string" || !logins) return res.status(400).json({ error: "Invalid logins" });
+
+  const list = logins.split(",");
+  if (list.length > 100 || !list.every((l) => /^[a-zA-Z0-9_]{1,25}$/.test(l))) {
+    return res.status(400).json({ error: "Invalid logins" });
+  }
+
+  try {
+    res.json({ avatars: await twitchAPIService.getAvatars(list) });
+  } catch (e) {
+    res.status(500).json({ error: "Error obteniendo avatares" });
   }
 };
 
