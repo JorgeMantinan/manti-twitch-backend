@@ -98,8 +98,16 @@ module.exports = (io) => {
     // Roulette announce
     socket.on("roulette:announce", (payload) => {
       if (!socket.data.user) return;
-      const { winner, channel } = payload || {};
+      const { winner, channel, prize } = payload || {};
       if (typeof winner !== "string" || !CHANNEL_RE.test(winner)) return;
+
+      let prizeText = null;
+      if (typeof prize === "string") {
+        const clean = prize.trim();
+        if (clean.length <= 40 && /^[\p{L}\p{N} .\-_!?¡¿()]+$/u.test(clean)) {
+          prizeText = clean;
+        }
+      }
 
       const own =
         typeof socket.data.user.login === "string"
@@ -139,7 +147,12 @@ module.exports = (io) => {
 
       announceTimes.set(target, now);
 
-      sayInChannel(target, `🏆 ¡@${winner} ha ganado el sorteo!`).catch(() => {});
+      sayInChannel(
+        target,
+        prizeText
+          ? `🏆 ¡@${winner} ha ganado el sorteo! (${prizeText})`
+          : `🏆 ¡@${winner} ha ganado el sorteo!`,
+      ).catch(() => {});
     });
 
     // Ahorcado game
