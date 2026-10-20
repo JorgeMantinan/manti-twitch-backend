@@ -103,26 +103,63 @@ async function getAvatars(logins) {
   return result;
 }
 
-const FOLLOW_LIST_TTL = 60 * 1000;
+const FOLLOW_LIST_TTL = 5 * 60 * 1000;
 const followListCache = new Map();
+
+const sleepMs = (ms) => new Promise((r) => setTimeout(r, ms));
+
+// GET with Twitch rate-limit (429) backoff: wait until Ratelimit-Reset (unix
+// seconds) or a growing fallback, up to `retries` times.
+async function helixGet(url, token, retries = 3) {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await axios.get(url, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Client-Id": process.env.TWITCH_CLIENT_ID,
+        },
+      });
+    } catch (err) {
+      const status = err.response?.status;
+      if (status === 429 && attempt < retries) {
+        const headers = err.response?.headers;
+        const resetRaw =
+          (typeof headers?.get === "function" && headers.get("ratelimit-reset")) ??
+          headers?.["ratelimit-reset"];
+        const resetAt = Number(resetRaw);
+        const nowSec = Date.now() / 1000;
+        const waitMs =
+          Number.isFinite(resetAt) && resetAt > nowSec
+            ? Math.min((resetAt - nowSec) * 1000 + 1000, 65000)
+            : 2000 * (attempt + 1);
+        await sleepMs(waitMs);
+        continue;
+      }
+      throw err;
+    }
+  }
+}
 
 async function fetchCapped(path, token, maxPages) {
   let all = [];
   let cursor = "";
   let pages = 0;
+  let total = null;
   do {
     const url = `https://api.twitch.tv/helix${path}${cursor ? `&after=${cursor}` : ""}`;
-    const res = await axios.get(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        "Client-Id": process.env.TWITCH_CLIENT_ID,
-      },
-    });
-    all.push(...res.data.data);
+    const res = await helixGet(url, token);
+    if (total === null) total = typeof res.data.total === "number" ? res.data.total : null;
+    all.push(...(res.data.data || []));
     cursor = res.data.pagination?.cursor;
     pages++;
+    // Small pacing so big lists don't trip the per-minute quota mid-fetch
+    if (cursor && pages < maxPages) await sleepMs(150);
   } while (cursor && pages < maxPages);
-  return all;
+  return {
+    rows: all,
+    total,
+    truncated: total !== null && all.length < total,
+  };
 }
 
 function cachedFollowList(key, loader) {
@@ -142,33 +179,41 @@ function cachedFollowList(key, loader) {
 }
 
 // Who the user follows (needs user:read:follows scope)
-async function getMyFollowings(twitchId, token, maxPages = 10) {
+async function getMyFollowings(twitchId, token, maxPages = 50) {
   return cachedFollowList(`fol:${twitchId}`, async () => {
-    const rows = await fetchCapped(
+    const { rows, total, truncated } = await fetchCapped(
       `/channels/followed?user_id=${twitchId}&first=100`,
       token,
       maxPages,
     );
-    return rows.map((r) => ({
-      login: (r.broadcaster_login || "").toLowerCase(),
-      name: r.broadcaster_name || r.broadcaster_login,
-    }));
+    return {
+      rows: rows.map((r) => ({
+        login: (r.broadcaster_login || "").toLowerCase(),
+        name: r.broadcaster_name || r.broadcaster_login,
+      })),
+      total,
+      truncated,
+    };
   });
 }
 
 // Who follows the user (needs moderator:read:followers scope on own channel)
-async function getMyFollowers(twitchId, token, maxPages = 30) {
+async function getMyFollowers(twitchId, token, maxPages = 100) {
   return cachedFollowList(`frs:${twitchId}`, async () => {
-    const rows = await fetchCapped(
+    const { rows, total, truncated } = await fetchCapped(
       `/channels/followers?broadcaster_id=${twitchId}&first=100`,
       token,
       maxPages,
     );
-    return rows.map((r) => ({
-      login: (r.user_login || "").toLowerCase(),
-      name: r.user_name || r.user_login,
-      at: r.followed_at,
-    }));
+    return {
+      rows: rows.map((r) => ({
+        login: (r.user_login || "").toLowerCase(),
+        name: r.user_name || r.user_login,
+        at: r.followed_at,
+      })),
+      total,
+      truncated,
+    };
   });
 }
 

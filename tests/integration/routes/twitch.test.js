@@ -65,15 +65,18 @@ describe('Twitch routes', () => {
 
   it('GET /api/twitch/followings returns the mapped list', async () => {
     process.env.JWT_SECRET = 'test-secret';
-    vi.spyOn(twitchAPIService, 'getMyFollowings').mockResolvedValueOnce([
-      { login: 'other', name: 'Other' },
-    ]);
+    vi.spyOn(twitchAPIService, 'getMyFollowings').mockResolvedValueOnce({
+      rows: [{ login: 'other', name: 'Other' }],
+      total: 1,
+      truncated: false,
+    });
     const token = jwt.sign({ twitchId: '123', scopes: [] }, process.env.JWT_SECRET, { algorithm: 'HS256' });
     const res = await request(app)
       .get('/api/twitch/followings')
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(1);
+    expect(res.body.truncated).toBe(false);
     expect(res.body.followings[0].login).toBe('other');
   });
 
@@ -84,15 +87,18 @@ describe('Twitch routes', () => {
 
   it('GET /api/twitch/followers returns the mapped list', async () => {
     process.env.JWT_SECRET = 'test-secret';
-    vi.spyOn(twitchAPIService, 'getMyFollowers').mockResolvedValueOnce([
-      { login: 'fan', name: 'Fan', at: '2026-01-01T00:00:00Z' },
-    ]);
+    vi.spyOn(twitchAPIService, 'getMyFollowers').mockResolvedValueOnce({
+      rows: [{ login: 'fan', name: 'Fan', at: '2026-01-01T00:00:00Z' }],
+      total: 1,
+      truncated: false,
+    });
     const token = jwt.sign({ twitchId: '123', scopes: [] }, process.env.JWT_SECRET, { algorithm: 'HS256' });
     const res = await request(app)
       .get('/api/twitch/followers')
       .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
     expect(res.body.total).toBe(1);
+    expect(res.body.truncated).toBe(false);
     expect(res.body.followers[0].login).toBe('fan');
   });
 
@@ -140,4 +146,36 @@ describe('Twitch routes', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true, login: 'someuser' });
   });
+
+  it('getMyFollowings retries once after a 429 and returns the list', async () => {
+    const axios = require('axios');
+    let calls = 0;
+    const spy = vi.spyOn(axios, 'get').mockImplementation(async () => {
+      calls++;
+      if (calls === 1) {
+        const err = new Error('rate limited');
+        err.response = {
+          status: 429,
+          headers: {
+            get: (h) =>
+              h === 'ratelimit-reset' ? String(Math.floor(Date.now() / 1000)) : null,
+          },
+        };
+        throw err;
+      }
+      return {
+        data: {
+          total: 1,
+          data: [{ broadcaster_login: 'retryx', broadcaster_name: 'RetryX' }],
+          pagination: {},
+        },
+      };
+    });
+
+    const result = await twitchAPIService.getMyFollowings('7770001', 'tok', 2);
+    expect(calls).toBe(2);
+    expect(result.rows[0].login).toBe('retryx');
+    expect(result.truncated).toBe(false);
+    spy.mockRestore();
+  }, 15000);
 });
