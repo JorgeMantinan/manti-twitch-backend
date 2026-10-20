@@ -156,16 +156,25 @@ exports.unfollow = async (req, res) => {
     if (e.code === "NOT_FOUND") {
       return res.status(404).json({ error: "Usuario no encontrado" });
     }
+    if (e.code === "INVALID_LOGIN") {
+      return res.status(400).json({ error: "Login inválido" });
+    }
     const status = e.response?.status;
+    const upstreamMsg = e.response?.data?.message || e.response?.data?.error || "";
+    console.error("unfollow upstream error:", status, upstreamMsg, e.message);
     if (status === 429) {
       return res.status(429).json({ error: "Límite de Twitch alcanzado, espera unos segundos" });
     }
     if (status === 401) return res.status(401).json({ error: "Token expirado" });
-    if (status === 403) {
-      return res.status(403).json({ error: "Twitch rechazó la operación" });
+    if (status === 403 || status === 404 || status === 410) {
+      return res.status(403).json({
+        error: "Twitch ya no permite dejar de seguir desde aplicaciones de terceros. Hazlo manualmente desde Twitch.",
+      });
     }
-    console.error("unfollow error:", e.message);
-    res.status(500).json({ error: "No se pudo dejar de seguir" });
+    res.status(502).json({
+      error: "Twitch devolvió un error al procesar la petición",
+      upstream: status || "sin respuesta",
+    });
   }
 };
 

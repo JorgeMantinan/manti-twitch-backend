@@ -195,13 +195,21 @@ async function unfollowUser(myId, targetLogin, token) {
     throw err;
   }
 
-  await axios.delete("https://api.twitch.tv/helix/channels/follow", {
-    params: { broadcaster_id: target.id, user_id: myId },
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Client-Id": process.env.TWITCH_CLIENT_ID,
-    },
-  });
+  try {
+    await axios.delete("https://api.twitch.tv/helix/channels/follow", {
+      params: { broadcaster_id: target.id, user_id: myId },
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Client-Id": process.env.TWITCH_CLIENT_ID,
+      },
+    });
+  } catch (delErr) {
+    // Wrap the DELETE error so the controller can inspect status/data
+    const err = new Error(delErr.message);
+    err.code = "UPSTREAM_DELETE";
+    err.response = delErr.response;
+    throw err;
+  }
 
   return true;
 }
