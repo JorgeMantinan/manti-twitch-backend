@@ -4,6 +4,7 @@ const axios = require('axios');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const config = require('../config/index');
+const twitchAPIService = require('../services/twitchAPI');
 
 const JWT_ALGORITHMS = ["HS256"];
 const JWT_EXPIRES_IN = "30d";
@@ -119,27 +120,37 @@ router.post("/exchange", (req, res) => {
     res.json({ token: entry.token });
 });
 
-// Sliding session: re-issue the JWT while the current one is still valid.
-router.post("/refresh", (req, res) => {
+// Sliding session: rotate the Twitch tokens and re-issue the app JWT.
+// Twitch refresh tokens are single-use (rotation), so the refreshed
+// access+refresh tokens MUST replace the ones embedded in the JWT.
+router.post("/refresh", async (req, res) => {
     const authHeader = req.headers.authorization;
     if (!authHeader) return res.status(401).json({ error: "No token provided" });
 
+    let decoded;
     try {
         const token = authHeader.split(" ")[1];
-        const decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: JWT_ALGORITHMS });
-
-        const newToken = signUserJwt({
-            twitchToken: decoded.twitchToken,
-            refreshToken: decoded.refreshToken,
-            twitchId: decoded.twitchId,
-            login: decoded.login,
-            scopes: decoded.scopes
-        });
-
-        res.json({ token: newToken });
+        decoded = jwt.verify(token, process.env.JWT_SECRET, { algorithms: JWT_ALGORITHMS });
     } catch (err) {
         return res.status(401).json({ error: "Invalid or expired token" });
     }
+
+    let rotated;
+    try {
+        rotated = await twitchAPIService.refreshTokens(decoded.refreshToken);
+    } catch (err) {
+        return res.status(401).json({ error: "refresh_failed" });
+    }
+
+    const newToken = signUserJwt({
+        twitchToken: rotated.access_token || decoded.twitchToken,
+        refreshToken: rotated.refresh_token || decoded.refreshToken,
+        twitchId: decoded.twitchId,
+        login: decoded.login,
+        scopes: decoded.scopes
+    });
+
+    res.json({ token: newToken });
 });
 
 module.exports = router;

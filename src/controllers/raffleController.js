@@ -1,11 +1,11 @@
 const raffleManager = require("../services/raffleManager");
-const { fetchAll, refreshTokens, twitchAPI } = require("../services/twitchAPI");
+const { fetchAll, twitchAPI } = require("../services/twitchAPI");
 const { getClient } = require("../services/tmiClient");
 const config = require("../config/index");
 
 exports.startRaffle = async (req, res) => {
   const { streamer, twitchChannel, game, keyword, subMult, giftMult, startDate, endDate } = req.body;
-  const { accessToken, refreshToken, twitchId } = req.user;
+  const { accessToken, twitchId } = req.user;
   const tmi = getClient();
 
   try {
@@ -28,9 +28,9 @@ exports.startRaffle = async (req, res) => {
       allSubs = await fetchAll(baseUrl, accessToken);
     } catch (err) {
       if (err.response?.status === 401) {
-        const tokens = await refreshTokens(refreshToken);
-        allSubs = await fetchAll(baseUrl, tokens.access_token);
-      } else throw err;
+        return res.status(401).json({ error: "token_expired" });
+      }
+      throw err;
     }
 
     const cachedSubs = new Map();

@@ -1,12 +1,12 @@
 const twitchAPIService = require("../services/twitchAPI");
-const { fetchAll, twitchAPI, refreshTokens } = twitchAPIService;
+const { fetchAll, twitchAPI } = twitchAPIService;
 const config = require("../config/index");
 
 let subsCache = { data: null, timestamp: 0 };
 
 exports.getSubs = async (req, res) => {
   try {
-    const { accessToken, refreshToken, twitchId } = req.user;
+    const { accessToken, twitchId } = req.user;
 
     if (subsCache.data && Date.now() - subsCache.timestamp < 60000) {
       return res.json(subsCache.data);
@@ -19,9 +19,9 @@ exports.getSubs = async (req, res) => {
       allSubs = await fetchAll(baseUrl, accessToken);
     } catch (err) {
       if (err.response?.status === 401) {
-        const newTokens = await refreshTokens(refreshToken);
-        allSubs = await fetchAll(baseUrl, newTokens.access_token);
-      } else throw err;
+        return res.status(401).json({ error: "token_expired" });
+      }
+      throw err;
     }
 
     const formattedSubs = allSubs.map((sub) => ({
@@ -116,8 +116,12 @@ const followApiError = (res, e) => {
 exports.getMyFollowings = async (req, res) => {
   const { twitchId, accessToken } = req.user;
   try {
-    const followings = await twitchAPIService.getMyFollowings(twitchId, accessToken, 10);
-    res.json({ followings, total: followings.length });
+    const result = await twitchAPIService.getMyFollowings(twitchId, accessToken, 50);
+    res.json({
+      followings: result.rows,
+      total: result.total,
+      truncated: result.truncated,
+    });
   } catch (e) {
     followApiError(res, e);
   }
@@ -126,8 +130,12 @@ exports.getMyFollowings = async (req, res) => {
 exports.getMyFollowers = async (req, res) => {
   const { twitchId, accessToken } = req.user;
   try {
-    const followers = await twitchAPIService.getMyFollowers(twitchId, accessToken, 30);
-    res.json({ followers, total: followers.length });
+    const result = await twitchAPIService.getMyFollowers(twitchId, accessToken, 100);
+    res.json({
+      followers: result.rows,
+      total: result.total,
+      truncated: result.truncated,
+    });
   } catch (e) {
     followApiError(res, e);
   }

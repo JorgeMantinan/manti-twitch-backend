@@ -1,12 +1,17 @@
 const request = require('supertest');
 const jwt = require('jsonwebtoken');
 const createApp = require('../../../src/app');
+const twitchAPIService = require('../../../src/services/twitchAPI');
 
 describe('Auth routes', () => {
   const app = createApp();
 
   beforeAll(() => {
     process.env.JWT_SECRET = 'test-secret';
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   const makeToken = (overrides = {}, options = {}) =>
@@ -24,7 +29,12 @@ describe('Auth routes', () => {
     expect(res.status).toBe(401);
   });
 
-  it('POST /auth/refresh issues a new token when the current one is valid', async () => {
+  it('POST /auth/refresh rotates Twitch tokens and issues a new token', async () => {
+    vi.spyOn(twitchAPIService, 'refreshTokens').mockResolvedValueOnce({
+      access_token: 'new-access',
+      refresh_token: 'new-refresh',
+      expires_in: 3600,
+    });
     const token = makeToken();
     const res = await request(app)
       .post('/auth/refresh')
@@ -34,8 +44,19 @@ describe('Auth routes', () => {
 
     const decoded = jwt.verify(res.body.token, 'test-secret', { algorithms: ['HS256'] });
     expect(decoded.login).toBe('testuser');
-    expect(decoded.refreshToken).toBe('t-refresh');
-    expect(decoded.scopes).toEqual([]);
+    expect(decoded.twitchToken).toBe('new-access');
+    expect(decoded.refreshToken).toBe('new-refresh');
+  });
+
+  it('POST /auth/refresh returns 401 when Twitch rejects the refresh token', async () => {
+    vi.spyOn(twitchAPIService, 'refreshTokens').mockRejectedValueOnce(
+      Object.assign(new Error('invalid_grant'), { response: { status: 400 } }),
+    );
+    const token = makeToken();
+    const res = await request(app)
+      .post('/auth/refresh')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(401);
   });
 
   it('POST /auth/refresh returns 401 for an expired token', async () => {
