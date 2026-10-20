@@ -9,6 +9,9 @@ function createApp(io) {
 
   app.set("trust proxy", 1);
   app.disable("x-powered-by");
+  // Authenticated JSON APIs: no ETags — a 304 (Not Modified) response has no
+  // body and breaks clients that expect JSON on every call.
+  app.disable("etag");
 
   app.use(helmet({
     contentSecurityPolicy: false,
@@ -16,6 +19,12 @@ function createApp(io) {
   }));
   app.use(cors({ origin: config.corsOrigins }));
   app.use(express.json());
+
+  // Never let browsers/proxies cache API responses
+  app.use("/api", (req, res, next) => {
+    res.set("Cache-Control", "no-store");
+    next();
+  });
 
   const authLimiter = rateLimit({
     windowMs: 60 * 1000,
