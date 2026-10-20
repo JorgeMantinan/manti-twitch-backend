@@ -43,7 +43,7 @@ function signUserJwt(user) {
 }
 
 router.get("/twitch", (req, res) => {
-    const scopes = ["moderator:read:chatters", "channel:read:subscriptions", "moderator:read:followers", "user:read:follows"].join(" ");
+    const scopes = ["moderator:read:chatters", "channel:read:subscriptions", "moderator:read:followers", "user:read:follows", "user:edit:follows"].join(" ");
     const state = crypto.randomBytes(16).toString("hex");
     res.cookie("oauth_state", state, {
         httpOnly: true,

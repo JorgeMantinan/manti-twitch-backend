@@ -95,4 +95,49 @@ describe('Twitch routes', () => {
     expect(res.body.total).toBe(1);
     expect(res.body.followers[0].login).toBe('fan');
   });
+
+  it('POST /api/twitch/unfollow returns 401 without token', async () => {
+    const res = await request(app).post('/api/twitch/unfollow').send({ login: 'someone' });
+    expect(res.status).toBe(401);
+  });
+
+  it('POST /api/twitch/unfollow returns 400 for invalid login', async () => {
+    process.env.JWT_SECRET = 'test-secret';
+    const token = jwt.sign({ scopes: 'user:edit:follows' }, process.env.JWT_SECRET, { algorithm: 'HS256' });
+    const res = await request(app)
+      .post('/api/twitch/unfollow')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ login: 'bad!name' });
+    expect(res.status).toBe(400);
+  });
+
+  it('POST /api/twitch/unfollow returns 403 when scope is missing', async () => {
+    process.env.JWT_SECRET = 'test-secret';
+    const token = jwt.sign(
+      { twitchId: '123', scopes: 'moderator:read:followers' },
+      process.env.JWT_SECRET,
+      { algorithm: 'HS256' },
+    );
+    const res = await request(app)
+      .post('/api/twitch/unfollow')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ login: 'someone' });
+    expect(res.status).toBe(403);
+  });
+
+  it('POST /api/twitch/unfollow returns 200 when the service succeeds', async () => {
+    process.env.JWT_SECRET = 'test-secret';
+    vi.spyOn(twitchAPIService, 'unfollowUser').mockResolvedValueOnce(true);
+    const token = jwt.sign(
+      { twitchId: '123', scopes: 'user:edit:follows' },
+      process.env.JWT_SECRET,
+      { algorithm: 'HS256' },
+    );
+    const res = await request(app)
+      .post('/api/twitch/unfollow')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ login: 'SomeUser' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true, login: 'someuser' });
+  });
 });

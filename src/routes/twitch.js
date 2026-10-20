@@ -20,6 +20,14 @@ const followListLimiter = rateLimit({
   message: { error: 'Too many requests' },
 });
 
+const unfollowLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: 'draft-7',
+  legacyHeaders: false,
+  message: { error: 'Too many requests' },
+});
+
 router.post("/subs", verifyToken, twitchController.getSubs);
 router.get("/subs-history", verifyToken, twitchController.getSubsHistory);
 router.get("/chatters", verifyToken, twitchController.getChatters);
@@ -27,5 +35,6 @@ router.post("/followers-between-dates", verifyToken, twitchController.getFollowe
 router.get("/avatars", avatarLimiter, verifyToken, twitchController.getAvatars);
 router.get("/followings", followListLimiter, verifyToken, twitchController.getMyFollowings);
 router.get("/followers", followListLimiter, verifyToken, twitchController.getMyFollowers);
+router.post("/unfollow", unfollowLimiter, verifyToken, twitchController.unfollow);
 
 module.exports = router;

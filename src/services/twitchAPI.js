@@ -172,4 +172,38 @@ async function getMyFollowers(twitchId, token, maxPages = 30) {
   });
 }
 
-module.exports = { fetchAll, refreshTokens, twitchAPI, getStreamerLogin, getAvatars, getMyFollowings, getMyFollowers };
+// Unfollow a channel as the authenticated user (needs user:edit:follows scope)
+async function unfollowUser(myId, targetLogin, token) {
+  const login = String(targetLogin || "").toLowerCase();
+  if (!LOGIN_RE.test(login)) {
+    const err = new Error("invalid login");
+    err.code = "INVALID_LOGIN";
+    throw err;
+  }
+
+  const userRes = await axios.get("https://api.twitch.tv/helix/users", {
+    params: { login },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Client-Id": process.env.TWITCH_CLIENT_ID,
+    },
+  });
+  const target = userRes.data.data[0];
+  if (!target) {
+    const err = new Error("user not found");
+    err.code = "NOT_FOUND";
+    throw err;
+  }
+
+  await axios.delete("https://api.twitch.tv/helix/channels/follow", {
+    params: { broadcaster_id: target.id, user_id: myId },
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Client-Id": process.env.TWITCH_CLIENT_ID,
+    },
+  });
+
+  return true;
+}
+
+module.exports = { fetchAll, refreshTokens, twitchAPI, getStreamerLogin, getAvatars, getMyFollowings, getMyFollowers, unfollowUser };

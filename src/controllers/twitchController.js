@@ -133,6 +133,42 @@ exports.getMyFollowers = async (req, res) => {
   }
 };
 
+exports.unfollow = async (req, res) => {
+  const { login } = req.body || {};
+  if (typeof login !== "string" || !/^[a-zA-Z0-9_]{1,25}$/.test(login)) {
+    return res.status(400).json({ error: "Login inválido" });
+  }
+
+  const scopesRaw = req.user.scopes;
+  const scopes = Array.isArray(scopesRaw)
+    ? scopesRaw
+    : String(scopesRaw || "").split(" ");
+  if (!scopes.includes("user:edit:follows")) {
+    return res
+      .status(403)
+      .json({ error: "Falta el permiso user:edit:follows — vuelve a iniciar sesión" });
+  }
+
+  try {
+    await twitchAPIService.unfollowUser(req.user.twitchId, login, req.user.accessToken);
+    res.json({ ok: true, login: login.toLowerCase() });
+  } catch (e) {
+    if (e.code === "NOT_FOUND") {
+      return res.status(404).json({ error: "Usuario no encontrado" });
+    }
+    const status = e.response?.status;
+    if (status === 429) {
+      return res.status(429).json({ error: "Límite de Twitch alcanzado, espera unos segundos" });
+    }
+    if (status === 401) return res.status(401).json({ error: "Token expirado" });
+    if (status === 403) {
+      return res.status(403).json({ error: "Twitch rechazó la operación" });
+    }
+    console.error("unfollow error:", e.message);
+    res.status(500).json({ error: "No se pudo dejar de seguir" });
+  }
+};
+
 exports.getFollowers = async (req, res) => {
     const { startDate, endDate, streamerNick } = req.body;
     const { accessToken } = req.user;
