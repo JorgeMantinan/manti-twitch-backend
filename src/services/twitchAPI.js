@@ -103,4 +103,73 @@ async function getAvatars(logins) {
   return result;
 }
 
-module.exports = { fetchAll, refreshTokens, twitchAPI, getStreamerLogin, getAvatars };
+const FOLLOW_LIST_TTL = 60 * 1000;
+const followListCache = new Map();
+
+async function fetchCapped(path, token, maxPages) {
+  let all = [];
+  let cursor = "";
+  let pages = 0;
+  do {
+    const url = `https://api.twitch.tv/helix${path}${cursor ? `&after=${cursor}` : ""}`;
+    const res = await axios.get(url, {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Client-Id": process.env.TWITCH_CLIENT_ID,
+      },
+    });
+    all.push(...res.data.data);
+    cursor = res.data.pagination?.cursor;
+    pages++;
+  } while (cursor && pages < maxPages);
+  return all;
+}
+
+function cachedFollowList(key, loader) {
+  const cached = followListCache.get(key);
+  if (cached && Date.now() - cached.at < FOLLOW_LIST_TTL) return cached.rows;
+
+  if (followListCache.size > 100) {
+    for (const [k, v] of followListCache) {
+      if (Date.now() - v.at >= FOLLOW_LIST_TTL) followListCache.delete(k);
+    }
+  }
+
+  return loader().then((rows) => {
+    followListCache.set(key, { rows, at: Date.now() });
+    return rows;
+  });
+}
+
+// Who the user follows (needs user:read:follows scope)
+async function getMyFollowings(twitchId, token, maxPages = 10) {
+  return cachedFollowList(`fol:${twitchId}`, async () => {
+    const rows = await fetchCapped(
+      `/channels/followed?user_id=${twitchId}&first=100`,
+      token,
+      maxPages,
+    );
+    return rows.map((r) => ({
+      login: (r.broadcaster_login || "").toLowerCase(),
+      name: r.broadcaster_name || r.broadcaster_login,
+    }));
+  });
+}
+
+// Who follows the user (needs moderator:read:followers scope on own channel)
+async function getMyFollowers(twitchId, token, maxPages = 30) {
+  return cachedFollowList(`frs:${twitchId}`, async () => {
+    const rows = await fetchCapped(
+      `/channels/followers?broadcaster_id=${twitchId}&first=100`,
+      token,
+      maxPages,
+    );
+    return rows.map((r) => ({
+      login: (r.user_login || "").toLowerCase(),
+      name: r.user_name || r.user_login,
+      at: r.followed_at,
+    }));
+  });
+}
+
+module.exports = { fetchAll, refreshTokens, twitchAPI, getStreamerLogin, getAvatars, getMyFollowings, getMyFollowers };

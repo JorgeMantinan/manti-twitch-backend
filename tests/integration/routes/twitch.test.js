@@ -57,4 +57,42 @@ describe('Twitch routes', () => {
     expect(res.body).toHaveProperty('avatars');
     expect(typeof res.body.avatars).toBe('object');
   });
+
+  it('GET /api/twitch/followings returns 401 without token', async () => {
+    const res = await request(app).get('/api/twitch/followings');
+    expect(res.status).toBe(401);
+  });
+
+  it('GET /api/twitch/followings returns the mapped list', async () => {
+    process.env.JWT_SECRET = 'test-secret';
+    vi.spyOn(twitchAPIService, 'getMyFollowings').mockResolvedValueOnce([
+      { login: 'other', name: 'Other' },
+    ]);
+    const token = jwt.sign({ twitchId: '123', scopes: [] }, process.env.JWT_SECRET, { algorithm: 'HS256' });
+    const res = await request(app)
+      .get('/api/twitch/followings')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.followings[0].login).toBe('other');
+  });
+
+  it('GET /api/twitch/followers returns 401 without token', async () => {
+    const res = await request(app).get('/api/twitch/followers');
+    expect(res.status).toBe(401);
+  });
+
+  it('GET /api/twitch/followers returns the mapped list', async () => {
+    process.env.JWT_SECRET = 'test-secret';
+    vi.spyOn(twitchAPIService, 'getMyFollowers').mockResolvedValueOnce([
+      { login: 'fan', name: 'Fan', at: '2026-01-01T00:00:00Z' },
+    ]);
+    const token = jwt.sign({ twitchId: '123', scopes: [] }, process.env.JWT_SECRET, { algorithm: 'HS256' });
+    const res = await request(app)
+      .get('/api/twitch/followers')
+      .set('Authorization', `Bearer ${token}`);
+    expect(res.status).toBe(200);
+    expect(res.body.total).toBe(1);
+    expect(res.body.followers[0].login).toBe('fan');
+  });
 });

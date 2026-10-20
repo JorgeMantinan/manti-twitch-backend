@@ -101,6 +101,38 @@ exports.getAvatars = async (req, res) => {
   }
 };
 
+const followApiError = (res, e) => {
+  const status = e.response?.status;
+  if (status === 401) return res.status(401).json({ error: "Token expirado" });
+  if (status === 403) {
+    return res
+      .status(403)
+      .json({ error: "Falta permiso de Twitch — vuelve a iniciar sesión" });
+  }
+  console.error("twitch follows error:", e.message);
+  return res.status(500).json({ error: "Error al consultar la API de Twitch" });
+};
+
+exports.getMyFollowings = async (req, res) => {
+  const { twitchId, accessToken } = req.user;
+  try {
+    const followings = await twitchAPIService.getMyFollowings(twitchId, accessToken, 10);
+    res.json({ followings, total: followings.length });
+  } catch (e) {
+    followApiError(res, e);
+  }
+};
+
+exports.getMyFollowers = async (req, res) => {
+  const { twitchId, accessToken } = req.user;
+  try {
+    const followers = await twitchAPIService.getMyFollowers(twitchId, accessToken, 30);
+    res.json({ followers, total: followers.length });
+  } catch (e) {
+    followApiError(res, e);
+  }
+};
+
 exports.getFollowers = async (req, res) => {
     const { startDate, endDate, streamerNick } = req.body;
     const { accessToken } = req.user;
