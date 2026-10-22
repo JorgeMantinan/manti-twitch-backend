@@ -43,6 +43,7 @@ function createApp(io) {
   app.use("/api/twitch", require("./routes/twitch"));
   app.use("/api/raffle", require("./routes/raffle"));
   app.use("/api/ahorcado", require("./routes/ahorcado"));
+  app.use("/", require("./routes/publicKaraoke"));
 
   app.get("/", (req, res) => res.send("🚀🚀🚀🚀🚀"));
 
