@@ -2,6 +2,7 @@ const jwt = require("jsonwebtoken");
 const { getBingoRoom, drawNumber, checkLine, checkBingo } = require("../utils/bingoEngine");
 const { getAhorcadoRoom, pickPhrase, drawLetter, isComplete, setActiveGame, clearActiveGame, channelKey } = require("../utils/ahorcadoEngine");
 const { getClient, sayInChannel } = require("../services/tmiClient");
+const shipsManager = require("../services/shipsManager");
 const { getStreamerLogin, refreshTokens } = require("../services/twitchAPI");
 
 const resolveChannelFromToken = async (token) => {
@@ -86,13 +87,50 @@ module.exports = (io) => {
       }
     });
 
-    // Ships game
-    socket.on("ships:action", (data) => {
+    // Ships game (Naval Clash) - el servidor es la autoridad de la simulacion
+    socket.on("ships:start", (payload) => {
         if (!socket.data.user) return;
         const streamer = socket.data?.ships;
-        if (streamer && data && typeof data === "object") {
-          io.to(`ships:${streamer}`).emit("ships:update", data);
+        if (!streamer) return;
+
+        const { participants, aspect, channel } = payload || {};
+        if (!Array.isArray(participants)) return;
+
+        const clean = participants
+            .filter((p) => p && typeof p.name === "string" && p.name.trim())
+            .slice(0, 24)
+            .map((p) => ({
+                name: p.name.trim().slice(0, 24),
+                isSub: !!p.isSub,
+            }));
+
+        if (clean.length < 2) return;
+
+        let ch = typeof channel === "string" && CHANNEL_RE.test(channel) ? channel : null;
+
+        shipsManager.start(streamer, clean, {
+            aspect: Number(aspect) || 16 / 9,
+            channel: ch,
+        });
+
+        if (ch) {
+            const tmi = getClient();
+            if (tmi && !tmi.getChannels().includes(`#${ch.toLowerCase()}`)) {
+                tmi.join(ch).catch(() => {});
+            }
         }
+
+        io.to(`ships:${streamer}`).emit("ships:started", {
+            count: clean.length,
+        });
+    });
+
+    socket.on("ships:stop", () => {
+        if (!socket.data.user) return;
+        const streamer = socket.data?.ships;
+        if (!streamer) return;
+        shipsManager.stop(streamer);
+        io.to(`ships:${streamer}`).emit("ships:stopped");
     });
 
     // Roulette announce

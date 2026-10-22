@@ -1,6 +1,7 @@
 const tmi = require('tmi.js');
 const raffleManager = require('./raffleManager');
 const ahorcadoEngine = require('../utils/ahorcadoEngine');
+const shipsManager = require('./shipsManager');
 
 let client;
 
@@ -18,6 +19,27 @@ const initTmi = (io) => {
         if (self) return;
 
         const channelName = channel.replace("#", "");
+
+        // Naval Clash: "!municion", "!fuego <barco>", "!blindaje <barco>"
+        const shipsCmd = shipsManager.handleChat(
+            channelName,
+            tags.username,
+            tags["display-name"] || tags.username,
+            message
+        );
+
+        if (shipsCmd) {
+            if (shipsCmd.ok) {
+                io.to(`ships:${shipsCmd.streamer}`).emit("ships:chatcmd", {
+                    ok: true,
+                    message: shipsCmd.message,
+                    by: tags["display-name"] || tags.username,
+                });
+
+                sayInChannel(channelName, `⚓ ${shipsCmd.message}`).catch(() => {});
+            }
+            return;
+        }
 
         // Ahorcado: "!ahorcado <frase>" guesses in chat, validated in real-time (sub check happens here)
         if (ahorcadoEngine.normalize(message).startsWith("!ahorcado")) {

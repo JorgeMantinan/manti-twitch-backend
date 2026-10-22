@@ -42,6 +42,9 @@ io.attach(server);
 const { initTmi } = require('./services/tmiClient');
 initTmi(io);
 
+const shipsManager = require('./services/shipsManager');
+shipsManager.init(io);
+
 const setupBingoSockets = require('./sockets/gameHandler');
 setupBingoSockets(io);
 
