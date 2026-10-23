@@ -33,14 +33,16 @@ router.post("/api/public/karaoke", (req, res) => {
 });
 
 // El OBS del streamer carga SIEMPRE esta URL; redirige al túnel del momento.
+// Reenvía TODA la query string (t=TOKEN, ch=canal, mute=1…) — si no, el overlay
+// pierde el ?ch= y el servidor no sabe de qué canal es.
 router.get("/karaoke/overlay", (req, res) => {
   if (!currentUrl) {
     return res
       .status(503)
       .send("<h1>Karaoke no conectado</h1><p>El servidor de karaoke no ha publicado su URL todavía (¿está arrancado?).</p>");
   }
-  const t = req.query.t ? `?t=${encodeURIComponent(req.query.t)}` : "";
-  res.redirect(302, `${currentUrl}/overlay${t}`);
+  const qs = new URLSearchParams(req.query).toString();
+  res.redirect(302, `${currentUrl}/overlay${qs ? "?" + qs : ""}`);
 });
 
 module.exports = router;
